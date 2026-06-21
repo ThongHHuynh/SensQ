@@ -216,6 +216,31 @@ source .venv/bin/activate
 python3 -m py_compile app/*.py
 ```
 
+If the backend reports this Jetson error:
+
+```text
+ModuleNotFoundError: No module named 'asyncpg.protocol.protocol'
+```
+
+the compiled `asyncpg` extension is missing or corrupted inside the virtualenv. Repair it with:
+
+```bash
+cd /home/tom/SensQ/backend
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install --force-reinstall --no-cache-dir asyncpg
+pip install -r requirements.txt
+```
+
+If the reinstall builds from source and fails, install build tools and retry:
+
+```bash
+sudo apt install -y build-essential python3-dev
+cd /home/tom/SensQ/backend
+source .venv/bin/activate
+pip install --force-reinstall --no-cache-dir asyncpg
+```
+
 Check frontend:
 
 ```bash

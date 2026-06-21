@@ -55,6 +55,22 @@ ALTER DATABASE sensq OWNER TO sensq;
 
 Run those SQL commands only inside the `postgres=#` prompt. After `\q`, SQL typed in the terminal will be interpreted by Bash and fail.
 
+If startup reports:
+
+```text
+ModuleNotFoundError: No module named 'asyncpg.protocol.protocol'
+```
+
+then the Jetson backend virtualenv has a broken `asyncpg` install. Repair it:
+
+```bash
+cd /home/tom/SensQ/backend
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install --force-reinstall --no-cache-dir asyncpg
+pip install -r requirements.txt
+```
+
 ## Run
 
 Build the ROS workspace first if needed:

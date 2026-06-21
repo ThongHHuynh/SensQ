@@ -153,6 +153,8 @@ Fix one of these:
 
      cd $BACKEND_DIR
      source .venv/bin/activate
+     pip install --upgrade pip setuptools wheel
+     pip install --force-reinstall --no-cache-dir asyncpg
      pip install -r requirements.txt
 
   3. Or run with your real database URL:

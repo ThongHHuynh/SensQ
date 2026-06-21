@@ -72,15 +72,39 @@ def generate_launch_description():
     joint_state_broadcaster = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["joint_state_broadcaster"],
+        arguments=[
+            "joint_state_broadcaster",
+            "--controller-manager",
+            "/controller_manager",
+            "--controller-manager-timeout",
+            "60",
+            "--param-file",
+            controller_path,
+        ],
         output="screen",
     )
 
     diff_drive = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=["diff_drive_controller"],
+        arguments=[
+            "diff_drive_controller",
+            "--controller-manager",
+            "/controller_manager",
+            "--controller-manager-timeout",
+            "60",
+            "--param-file",
+            controller_path,
+        ],
         output="screen",
+    )
+
+    delayed_controllers = TimerAction(
+        period=2.0,
+        actions=[
+            joint_state_broadcaster,
+            diff_drive,
+        ],
     )
 
     lidar_launch = IncludeLaunchDescription(
@@ -157,8 +181,7 @@ def generate_launch_description():
             ),
             robot_state_publisher_node,
             controller_node,
-            joint_state_broadcaster,
-            diff_drive,
+            delayed_controllers,
             lidar_launch,
             delayed_nav2,
             rviz2_node,

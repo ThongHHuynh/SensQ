@@ -10,12 +10,13 @@ import {
   LocateFixed,
   MapPinned,
   Play,
+  Pencil,
   Save,
   Square
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader.jsx";
-import { saveMap, sendTeleopCommand, startMapping, startTeleop, stopMapping, stopTeleop } from "../services/robotApi.js";
+import { renameMap, saveMap, selectMap, sendTeleopCommand, startMapping, startTeleop, stopMapping, stopTeleop } from "../services/robotApi.js";
 
 function MapsPage({ robot }) {
   const maps = Array.isArray(robot.maps) ? robot.maps : [];
@@ -24,6 +25,9 @@ function MapsPage({ robot }) {
   const liveMap = robot.liveMap ?? {};
   const mappingState = navigation.mapping ?? "idle";
   const [mapName, setMapName] = useState("Lab map");
+  const [mapMessage, setMapMessage] = useState("Select or rename saved maps.");
+  const [editingMapId, setEditingMapId] = useState(null);
+  const [editingMapName, setEditingMapName] = useState("");
   const [mappingMessage, setMappingMessage] = useState("Start mapping, drive the robot, then save the map.");
   const [teleopReady, setTeleopReady] = useState(false);
   const [teleopStatus, setTeleopStatus] = useState("idle");
@@ -95,6 +99,30 @@ function MapsPage({ robot }) {
     }
   }
 
+  async function handleSelectMap(map) {
+    try {
+      const result = await selectMap(map.id);
+      setMapMessage(result.message || "Map selected");
+    } catch (err) {
+      setMapMessage(err.message);
+    }
+  }
+
+  function handleStartRename(map) {
+    setEditingMapId(map.id);
+    setEditingMapName(map.name || "");
+  }
+
+  async function handleRenameMap(map) {
+    try {
+      const result = await renameMap(map.id, editingMapName);
+      setEditingMapId(null);
+      setMapMessage(result.message || "Map renamed");
+    } catch (err) {
+      setMapMessage(err.message);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -131,18 +159,61 @@ function MapsPage({ robot }) {
 
         <aside className="rounded-md border border-console-line bg-white p-5">
           <h2 className="text-lg font-semibold tracking-normal">Available maps</h2>
+          <p className="mt-1 text-sm text-slate-500">{mapMessage}</p>
           <div className="mt-4 space-y-3">
-            {maps.map((map) => (
-              <button
-                key={map.id || map.name}
-                type="button"
-                className="w-full rounded-md border border-console-line bg-console-panel p-3 text-left transition hover:border-signal-info"
-              >
-                <div className="font-medium text-console-ink">{map.name || "Unnamed map"}</div>
-                <div className="mt-1 text-sm text-slate-500">{map.resolution || "Resolution unknown"}</div>
-                <div className="mt-2 text-xs font-medium text-slate-500">{map.updated || "Not synced"}</div>
-              </button>
-            ))}
+            {maps.map((map) => {
+              const isActive = map.name === navigation.activeMap;
+              const isSaved = String(map.id || "").startsWith("saved-");
+              const isEditing = editingMapId === map.id;
+
+              return (
+                <div
+                  key={map.id || map.name}
+                  className={`rounded-md border p-3 transition ${
+                    isActive ? "border-emerald-400 bg-emerald-50" : "border-console-line bg-console-panel"
+                  }`}
+                >
+                  {isEditing ? (
+                    <div className="flex gap-2">
+                      <input
+                        className="h-9 min-w-0 flex-1 rounded-md border border-console-line px-2 text-sm"
+                        value={editingMapName}
+                        onChange={(event) => setEditingMapName(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRenameMap(map)}
+                        className="h-9 rounded-md bg-console-rail px-2 text-xs font-semibold text-white"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <button type="button" onClick={() => handleSelectMap(map)} className="min-w-0 flex-1 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-medium text-console-ink">{map.name || "Unnamed map"}</span>
+                          {isActive ? <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-label="Active map" /> : null}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-500">{map.resolution || "Resolution unknown"}</div>
+                        <div className="mt-2 truncate text-xs font-medium text-slate-500">{map.updated || "Not synced"}</div>
+                      </button>
+                      {isSaved ? (
+                        <button
+                          type="button"
+                          onClick={() => handleStartRename(map)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-console-line bg-white text-slate-600"
+                          aria-label={`Rename ${map.name}`}
+                          title="Rename map"
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {maps.length === 0 ? <div className="text-sm text-slate-500">Waiting for map metadata.</div> : null}
           </div>
         </aside>

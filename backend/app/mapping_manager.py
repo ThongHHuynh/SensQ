@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .config import MAP_SAVE_DIR, ROS_DISTRO, ROS_WORKSPACE
-from .database import create_saved_map, list_saved_maps, save_event
+from .database import create_saved_map, get_saved_map, list_saved_maps, rename_saved_map, save_event
 from .state import robot_state
 from .websocket_manager import ws_manager
 
@@ -97,6 +97,41 @@ class MappingManager:
         await save_event("mapping", f"Saved map '{map_name}' to {yaml_path}")
         await ws_manager.broadcast(snapshot)
         return {"ok": True, "message": f"Saved map '{map_name}'", "map": saved_map_to_payload(saved_map)}
+
+    async def select_map(self, map_id: str) -> dict:
+        if map_id == "live":
+            active_name = "Live SLAM"
+        elif map_id == "maze":
+            active_name = "Maze simulation"
+        elif map_id.startswith("saved-"):
+            saved_map = await get_saved_map(int(map_id.replace("saved-", "", 1)))
+            if saved_map is None:
+                return {"ok": False, "message": "Saved map not found"}
+            active_name = saved_map.name
+        else:
+            return {"ok": False, "message": "Map not found"}
+
+        snapshot = robot_state.update({"navigation": {"activeMap": active_name}})
+        await save_event("mapping", f"Selected active map '{active_name}'")
+        await ws_manager.broadcast(snapshot)
+        return {"ok": True, "message": f"Selected '{active_name}'", "activeMap": active_name}
+
+    async def rename(self, map_id: str, name: str) -> dict:
+        new_name = name.strip()
+        if not new_name:
+            return {"ok": False, "message": "Map name is required"}
+        if not map_id.startswith("saved-"):
+            return {"ok": False, "message": "Only saved maps can be renamed"}
+
+        saved_map = await rename_saved_map(int(map_id.replace("saved-", "", 1)), new_name)
+        if saved_map is None:
+            return {"ok": False, "message": "Saved map not found"}
+
+        await self.load_saved_maps_into_state()
+        snapshot = robot_state.update({"navigation": {"activeMap": new_name}})
+        await save_event("mapping", f"Renamed saved map to '{new_name}'")
+        await ws_manager.broadcast(snapshot)
+        return {"ok": True, "message": f"Renamed map to '{new_name}'", "map": saved_map_to_payload(saved_map)}
 
 
 mapping_manager = MappingManager()

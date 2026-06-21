@@ -39,3 +39,20 @@ async def list_saved_maps() -> list[SavedMap]:
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(SavedMap).order_by(SavedMap.created_at.desc()))
         return list(result.scalars().all())
+
+
+async def get_saved_map(map_id: int) -> SavedMap | None:
+    async with AsyncSessionLocal() as session:
+        return await session.get(SavedMap, map_id)
+
+
+async def rename_saved_map(map_id: int, name: str) -> SavedMap | None:
+    async with AsyncSessionLocal() as session:
+        saved_map = await session.get(SavedMap, map_id)
+        if saved_map is None:
+            return None
+
+        saved_map.name = name
+        await session.commit()
+        await session.refresh(saved_map)
+        return saved_map

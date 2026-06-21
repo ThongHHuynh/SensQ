@@ -25,6 +25,10 @@ class CmdVelRequest(BaseModel):
 class SaveMapRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
 
+
+class RenameMapRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):[0-9]+",
@@ -111,6 +115,16 @@ async def stop_mapping() -> dict:
 @app.post("/api/mapping/save")
 async def save_map(request: SaveMapRequest) -> dict:
     return await mapping_manager.save(request.name)
+
+
+@app.post("/api/maps/{map_id}/select")
+async def select_map(map_id: str) -> dict:
+    return await mapping_manager.select_map(map_id)
+
+
+@app.patch("/api/maps/{map_id}")
+async def rename_map(map_id: str, request: RenameMapRequest) -> dict:
+    return await mapping_manager.rename(map_id, request.name)
 
 
 @app.websocket("/ws/robot-state")

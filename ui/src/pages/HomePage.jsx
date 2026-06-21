@@ -13,6 +13,10 @@ function HomePage({ robot, setRobot, source, error }) {
   const batteryPercent = typeof robot.battery.percent === "number" ? `${robot.battery.percent}%` : "Waiting";
   const batteryDetail =
     typeof robot.battery.voltage === "number" ? `${robot.battery.voltage} V, ${robot.battery.state}` : robot.battery.state;
+  const connectionTone = source === "backend" ? "ok" : "warn";
+  const motorTone = robot.hardwareStatus.are_motors_ready ? "ok" : "warn";
+  const batteryTone = typeof robot.battery.percent === "number" ? "ok" : "default";
+  const navigationTone = robot.navigation.state === "Mapping" || robot.navigation.localization !== "Waiting" ? "ok" : "default";
 
   async function handleStart() {
     try {
@@ -65,21 +69,30 @@ function HomePage({ robot, setRobot, source, error }) {
           label="Connection"
           value={source === "backend" ? "Backend" : "Mock"}
           detail={actionError ?? (error ? `Backend unavailable: ${error}` : `Launch ${launchState}`)}
-          tone={source === "backend" ? "ok" : "warn"}
+          tone={connectionTone}
+          statusLabel={source === "backend" ? "Online" : "Mock"}
         />
         <MetricCard
           label="Motors"
           value={robot.hardwareStatus.are_motors_ready ? "Ready" : "Not ready"}
           detail={robot.hardwareStatus.debug_message}
-          tone={robot.hardwareStatus.are_motors_ready ? "ok" : "warn"}
+          tone={motorTone}
+          statusLabel={robot.hardwareStatus.are_motors_ready ? "Ready" : "Waiting"}
         />
         <MetricCard
           label="Battery"
           value={batteryPercent}
           detail={batteryDetail}
-          tone={typeof robot.battery.percent === "number" ? "ok" : "default"}
+          tone={batteryTone}
+          statusLabel={typeof robot.battery.percent === "number" ? "OK" : "Unknown"}
         />
-        <MetricCard label="Navigation" value={robot.navigation.state} detail={robot.navigation.activeMap} />
+        <MetricCard
+          label="Navigation"
+          value={robot.navigation.state}
+          detail={robot.navigation.activeMap}
+          tone={navigationTone}
+          statusLabel={navigationTone === "ok" ? "Active" : "Idle"}
+        />
       </section>
 
       <section className="mt-6 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">

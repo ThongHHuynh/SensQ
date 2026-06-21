@@ -117,6 +117,32 @@ export async function saveMap(name) {
   return response.json();
 }
 
+export async function selectMap(mapId) {
+  const response = await fetch(`${API_BASE_URL}/api/maps/${encodeURIComponent(mapId)}/select`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Map select failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function renameMap(mapId, name) {
+  const response = await fetch(`${API_BASE_URL}/api/maps/${encodeURIComponent(mapId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Map rename failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export function createRobotStateSocket() {
   return new WebSocket(`${WS_BASE_URL}/ws/robot-state`);
 }

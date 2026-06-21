@@ -1,0 +1,205 @@
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleStop, Crosshair, Gamepad2, LocateFixed, MapPinned } from "lucide-react";
+import { useState } from "react";
+import PageHeader from "../components/PageHeader.jsx";
+import { sendTeleopCommand, startTeleop, stopTeleop } from "../services/robotApi.js";
+
+function MapsPage({ robot }) {
+  const maps = Array.isArray(robot.maps) ? robot.maps : [];
+  const pose = robot.pose ?? {};
+  const navigation = robot.navigation ?? {};
+  const [teleopReady, setTeleopReady] = useState(false);
+  const [teleopStatus, setTeleopStatus] = useState("idle");
+  const [teleopMessage, setTeleopMessage] = useState("Start teleop before sending web drive commands.");
+
+  async function handleStartTeleop() {
+    setTeleopStatus("starting");
+    setTeleopMessage("Starting teleop...");
+    try {
+      const result = await startTeleop();
+      setTeleopReady(Boolean(result.running));
+      setTeleopStatus(result.ok && result.running ? "online" : "error");
+      setTeleopMessage(result.message || "Teleop started");
+    } catch (err) {
+      setTeleopReady(false);
+      setTeleopStatus("error");
+      setTeleopMessage(err.message);
+    }
+  }
+
+  async function handleStopTeleop() {
+    try {
+      await sendTeleopCommand({ linear_x: 0, angular_z: 0 });
+      const result = await stopTeleop();
+      setTeleopReady(false);
+      setTeleopStatus("idle");
+      setTeleopMessage(result.message || "Teleop stopped");
+    } catch (err) {
+      setTeleopStatus("error");
+      setTeleopMessage(err.message);
+    }
+  }
+
+  async function handleDrive(linear_x, angular_z) {
+    try {
+      const result = await sendTeleopCommand({ linear_x, angular_z });
+      setTeleopStatus(result.ok ? "online" : "error");
+      setTeleopMessage(result.message || "Command sent");
+    } catch (err) {
+      setTeleopStatus("error");
+      setTeleopMessage(err.message);
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Maps"
+        title="Mapping and localization"
+        description="Placeholder map surface for later Nav2, SLAM, saved map selection, and goal-setting workflows."
+        actions={
+          <>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white">
+              <LocateFixed className="h-4 w-4" aria-hidden="true" />
+              Center
+            </button>
+            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink">
+              <Crosshair className="h-4 w-4" aria-hidden="true" />
+              Set Goal
+            </button>
+          </>
+        }
+      />
+
+      <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div className="relative min-h-[420px] overflow-hidden rounded-md border border-console-line bg-white shadow-soft">
+          <div className="map-grid absolute inset-0 bg-[#f8fafc]" />
+          <div className="absolute left-[52%] top-[48%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-signal-info text-white shadow-soft">
+              <MapPinned className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div className="mt-2 rounded-md bg-console-rail px-2 py-1 text-xs font-semibold text-white">
+              x {pose.x ?? 0}, y {pose.y ?? 0}, yaw {pose.yaw ?? 0} deg
+            </div>
+          </div>
+          <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm shadow-soft">
+            Active map: {navigation.activeMap ?? "Waiting"}
+          </div>
+        </div>
+
+        <aside className="rounded-md border border-console-line bg-white p-5 shadow-soft">
+          <h2 className="text-lg font-semibold tracking-normal">Available maps</h2>
+          <div className="mt-4 space-y-3">
+            {maps.map((map) => (
+              <button
+                key={map.id || map.name}
+                type="button"
+                className="w-full rounded-md border border-console-line bg-console-panel p-3 text-left transition hover:border-signal-info"
+              >
+                <div className="font-medium text-console-ink">{map.name || "Unnamed map"}</div>
+                <div className="mt-1 text-sm text-slate-500">{map.resolution || "Resolution unknown"}</div>
+                <div className="mt-2 text-xs font-medium text-slate-500">{map.updated || "Not synced"}</div>
+              </button>
+            ))}
+            {maps.length === 0 ? <div className="text-sm text-slate-500">Waiting for map metadata.</div> : null}
+          </div>
+        </aside>
+      </section>
+
+      <section className="mt-4 rounded-md border border-console-line bg-white p-5 shadow-soft">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Gamepad2 className="h-5 w-5 text-signal-info" aria-hidden="true" />
+              <h2 className="text-lg font-semibold tracking-normal">Teleoperation</h2>
+              <TeleopStatusLight status={teleopStatus} />
+            </div>
+            <p className="mt-1 text-sm text-slate-600">{teleopMessage}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleStartTeleop}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+            >
+              <Gamepad2 className="h-4 w-4" aria-hidden="true" />
+              Start Teleop
+            </button>
+            <button
+              type="button"
+              onClick={handleStopTeleop}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+            >
+              <CircleStop className="h-4 w-4" aria-hidden="true" />
+              Stop Teleop
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-[220px_1fr]">
+          <div className="grid w-[180px] grid-cols-3 gap-2 justify-self-center lg:justify-self-start">
+            <div />
+            <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(0.2, 0)} />
+            <div />
+            <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, 0.6)} />
+            <TeleopButton disabled={!teleopReady} label="Stop" icon={CircleStop} onClick={() => handleDrive(0, 0)} tone="stop" />
+            <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -0.6)} />
+            <div />
+            <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-0.2, 0)} />
+            <div />
+          </div>
+
+          <div className="rounded-md border border-console-line bg-console-panel p-4 text-sm text-slate-600">
+            <div className="font-semibold text-console-ink">Command mapping</div>
+            <div className="mt-2 font-mono">ros2 run teleop_twist_keyboard teleop_twist_keyboard</div>
+            <div className="mt-3">The website buttons publish bounded `geometry_msgs/Twist` commands to `/cmd_vel` through FastAPI.</div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function TeleopStatusLight({ status }) {
+  const styles = {
+    idle: "bg-slate-300",
+    starting: "bg-amber-400",
+    online: "bg-emerald-500",
+    error: "bg-orange-600"
+  };
+
+  const labels = {
+    idle: "Teleop idle",
+    starting: "Teleop starting",
+    online: "Teleop online",
+    error: "Teleop error"
+  };
+
+  return (
+    <span className="inline-flex items-center gap-2 rounded-md border border-console-line bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+      <span className={`h-2.5 w-2.5 rounded-full ${styles[status] ?? styles.idle}`} aria-hidden="true" />
+      {labels[status] ?? labels.idle}
+    </span>
+  );
+}
+
+function TeleopButton({ disabled, label, icon: Icon, onClick, tone = "default" }) {
+  const className =
+    tone === "stop"
+      ? "bg-orange-100 text-orange-800 hover:bg-orange-200"
+      : "bg-slate-100 text-console-ink hover:bg-slate-200";
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex aspect-square items-center justify-center rounded-md border border-console-line transition disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+    >
+      <Icon className="h-5 w-5" aria-hidden="true" />
+    </button>
+  );
+}
+
+export default MapsPage;

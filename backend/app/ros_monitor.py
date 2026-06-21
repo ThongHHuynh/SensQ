@@ -15,6 +15,12 @@ def yaw_from_quaternion(z: float, w: float) -> float:
     return math.degrees(math.atan2(2.0 * w * z, 1.0 - 2.0 * z * z))
 
 
+def yaw_from_full_quaternion(x: float, y: float, z: float, w: float) -> float:
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.degrees(math.atan2(siny_cosp, cosy_cosp))
+
+
 def occupancy_grid_to_payload(msg, max_cells: int = 260) -> dict:
     width = int(msg.info.width)
     height = int(msg.info.height)
@@ -128,6 +134,44 @@ class RosMonitor:
                 LaserScan = None
                 Imu = None
 
+            try:
+                import tf2_ros
+                tf_buffer = tf2_ros.Buffer()
+                tf2_ros.TransformListener(tf_buffer, node)
+            except Exception:
+                tf_buffer = None
+
+            def update_map_pose() -> None:
+                if tf_buffer is None:
+                    return
+                try:
+                    transform = tf_buffer.lookup_transform("map", "base_footprint", rclpy.time.Time())
+                except Exception:
+                    return
+
+                translation = transform.transform.translation
+                rotation = transform.transform.rotation
+                snapshot = robot_state.update(
+                    {
+                        "pose": {
+                            "frame": "map",
+                            "x": round(float(translation.x), 3),
+                            "y": round(float(translation.y), 3),
+                            "yaw": round(
+                                yaw_from_full_quaternion(
+                                    float(rotation.x),
+                                    float(rotation.y),
+                                    float(rotation.z),
+                                    float(rotation.w),
+                                ),
+                                1,
+                            ),
+                        },
+                        "navigation": {"localization": "Receiving map TF"},
+                    }
+                )
+                self._publish(snapshot)
+
             def odom_cb(msg) -> None:
                 now = datetime.now(timezone.utc).isoformat()
                 pose = msg.pose.pose
@@ -196,6 +240,8 @@ class RosMonitor:
                 node.create_subscription(LaserScan, "/scan", scan_cb, 10)
             if Imu is not None:
                 node.create_subscription(Imu, "/imu", imu_cb, 10)
+            if tf_buffer is not None:
+                node.create_timer(0.5, update_map_pose)
             rclpy.spin(node)
 
         self._thread = Thread(target=run, daemon=True)

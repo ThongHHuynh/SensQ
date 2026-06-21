@@ -8,7 +8,6 @@ import {
   Disc3,
   Gamepad2,
   LocateFixed,
-  MapPinned,
   Play,
   Pencil,
   Save,
@@ -18,6 +17,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader.jsx";
 import { renameMap, saveMap, selectMap, sendTeleopCommand, startMapping, startTeleop, stopMapping, stopTeleop } from "../services/robotApi.js";
+
+const DEG_TO_RAD = Math.PI / 180;
 
 function MapsPage({ robot }) {
   const maps = Array.isArray(robot.maps) ? robot.maps : [];
@@ -149,7 +150,7 @@ function MapsPage({ robot }) {
       <section className="grid gap-4 xl:grid-cols-[1fr_280px]">
         <div className="space-y-4">
           <div className="relative min-h-[72vh] overflow-hidden rounded-md border border-console-line bg-white">
-            <LiveMapCanvas liveMap={liveMap} />
+            <LiveMapCanvas liveMap={liveMap} pose={pose} />
             <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
               Active map: {navigation.activeMap ?? "Waiting"}
             </div>
@@ -401,7 +402,7 @@ function MappingStatusLight({ status }) {
   );
 }
 
-function LiveMapCanvas({ liveMap }) {
+function LiveMapCanvas({ liveMap, pose }) {
   const canvasRef = useRef(null);
   const hasMap = Array.isArray(liveMap.data) && liveMap.data.length > 0 && liveMap.width > 0 && liveMap.height > 0;
 
@@ -434,7 +435,38 @@ function LiveMapCanvas({ liveMap }) {
         ctx.fillRect(x * scale, canvasY * scale, scale, scale);
       }
     }
-  }, [hasMap, liveMap]);
+
+    const resolution = Number(liveMap.resolution || 0);
+    const origin = liveMap.origin || {};
+    const poseX = Number(pose?.x ?? 0);
+    const poseY = Number(pose?.y ?? 0);
+    const yaw = Number(pose?.yaw ?? 0);
+
+    if (resolution > 0) {
+      const mapX = (poseX - Number(origin.x ?? 0)) / resolution;
+      const mapY = (poseY - Number(origin.y ?? 0)) / resolution;
+      const canvasX = mapX * scale;
+      const canvasY = (height - mapY - 1) * scale;
+
+      if (canvasX >= 0 && canvasX <= canvas.width && canvasY >= 0 && canvasY <= canvas.height) {
+        ctx.save();
+        ctx.translate(canvasX, canvasY);
+        ctx.rotate(-DEG_TO_RAD * yaw);
+        ctx.fillStyle = "#2563eb";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = Math.max(2, scale * 0.55);
+        ctx.beginPath();
+        ctx.moveTo(0, -Math.max(10, scale * 2.4));
+        ctx.lineTo(Math.max(7, scale * 1.8), Math.max(8, scale * 1.8));
+        ctx.lineTo(0, Math.max(4, scale));
+        ctx.lineTo(-Math.max(7, scale * 1.8), Math.max(8, scale * 1.8));
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }, [hasMap, liveMap, pose]);
 
   if (!hasMap) {
     return (
@@ -454,11 +486,6 @@ function LiveMapCanvas({ liveMap }) {
         <div className="mt-1">{liveMap.width} x {liveMap.height}</div>
         <div>{liveMap.resolution ?? "?"} m/px</div>
         <div>{liveMap.status ?? "Receiving map"}</div>
-      </div>
-      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-signal-info text-white">
-          <MapPinned className="h-5 w-5" aria-hidden="true" />
-        </div>
       </div>
     </div>
   );

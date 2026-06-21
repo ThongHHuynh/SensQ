@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Battery, Compass, Cpu, Radio } from "lucide-react";
 import MetricCard from "../components/MetricCard.jsx";
 import PageHeader from "../components/PageHeader.jsx";
+import RobotModelViewer from "../components/RobotModelViewer.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { startMobileBase, stopRobot } from "../services/robotApi.js";
 
@@ -96,6 +97,8 @@ function HomePage({ robot, setRobot, source, error }) {
       </section>
 
       <section className="mt-6 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+        <RobotModelViewer pose={robot.pose} motorsReady={robot.hardwareStatus.are_motors_ready} />
+
         <div className="rounded-md border border-console-line bg-white p-5 shadow-soft">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold tracking-normal">Live robot context</h2>

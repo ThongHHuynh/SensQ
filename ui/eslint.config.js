@@ -18,6 +18,9 @@ export default [
       globals: {
         document: "readonly",
         fetch: "readonly",
+        cancelAnimationFrame: "readonly",
+        requestAnimationFrame: "readonly",
+        ResizeObserver: "readonly",
         WebSocket: "readonly",
         window: "readonly"
       }

@@ -61,6 +61,7 @@ If startup reports one of these compiled dependency errors:
 ModuleNotFoundError: No module named 'asyncpg.protocol.protocol'
 ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'
 ValueError: the greenlet library is required to use this function. No module named 'greenlet._greenlet'
+ROS command publisher disabled: No module named 'numpy'
 ```
 
 then the Jetson backend virtualenv has a broken compiled package install. Repair it:
@@ -69,7 +70,7 @@ then the Jetson backend virtualenv has a broken compiled package install. Repair
 cd /home/tom/SensQ/backend
 source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
-pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic
+pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic numpy
 pip install -r requirements.txt
 ```
 
@@ -120,11 +121,11 @@ ros2 launch my_robot_bringup my_robot.launch.py
 
 5. The backend listens for:
 
-- `/hardware_status`
 - `/joint_states`
 - `/diff_drive_controller/odom`
 - `/scan`
 - `/imu`
+- `/map`
 
 6. The backend streams updates to:
 
@@ -132,7 +133,18 @@ ros2 launch my_robot_bringup my_robot.launch.py
 ws://localhost:8000/ws/robot-state
 ```
 
-7. The Device Status page shows `ESP32` as online once real hardware status is received through the serial-connected mobile base.
+The Maps tab renders `/map` from `slam_toolbox` as an occupancy grid, similar to adding a Map display in RViz with fixed frame `map`.
+
+Mapping endpoints:
+
+- `POST /api/mapping/start`
+- `POST /api/mapping/stop`
+- `POST /api/mapping/save`
+- `GET /api/maps`
+
+Saved maps are written under `data/maps/` and registered in PostgreSQL table `saved_maps`.
+
+7. The Device Status page shows `Mobile base` as ready once `/joint_states` or `/diff_drive_controller/odom` is received. `ESP32` is inferred from serial-port availability and hardware-interface launch logs.
 
 ## Step-by-Step Implementation Summary
 
@@ -156,6 +168,10 @@ ws://localhost:8000/ws/robot-state
 - `POST /api/teleop/start`
 - `POST /api/teleop/stop`
 - `POST /api/teleop/cmd_vel`
+- `GET /api/maps`
+- `POST /api/mapping/start`
+- `POST /api/mapping/stop`
+- `POST /api/mapping/save`
 - `WS /ws/robot-state`
 
 ## Teleoperation

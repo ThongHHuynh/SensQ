@@ -22,6 +22,8 @@ class LaunchManager:
             return robot_state.get_snapshot()
 
         workspace = Path(ROS_WORKSPACE)
+        serial_exists = os.path.exists(SERIAL_PORT)
+        serial_accessible = serial_exists and os.access(SERIAL_PORT, os.R_OK | os.W_OK)
         command = (
             f"source /opt/ros/{ROS_DISTRO}/setup.bash && "
             f"source {workspace}/install/setup.bash && "
@@ -40,7 +42,13 @@ class LaunchManager:
         )
 
         snapshot = robot_state.set_launch_state("starting")
-        robot_state.update_device("ESP32", "warning", f"Checking serial link at {SERIAL_PORT}", SERIAL_PORT)
+        if serial_accessible:
+            robot_state.update_device("ESP32", "warning", f"Serial device found, waiting for hardware activation at {SERIAL_PORT}", SERIAL_PORT)
+        elif serial_exists:
+            robot_state.update_device("ESP32", "warning", f"Serial device exists but is not readable/writable: {SERIAL_PORT}", SERIAL_PORT)
+        else:
+            robot_state.update_device("ESP32", "offline", f"{SERIAL_PORT} not found; launch will use mock hardware", SERIAL_PORT)
+            robot_state.update_device("Mobile base", "warning", "Mock hardware selected by launch file")
         await save_event("launch", "Started my_robot.launch.py")
         await ws_manager.broadcast(snapshot)
 
@@ -78,11 +86,13 @@ class LaunchManager:
             lower = line.lower()
             if "opening serial" in lower:
                 snapshot = robot_state.set_launch_state("running")
-                robot_state.update_device("ESP32", "warning", "Serial port opening", SERIAL_PORT)
+                robot_state.update_device("ESP32", "online", "Hardware interface opened serial port", SERIAL_PORT)
+                robot_state.update_device("Mobile base", "warning", "Hardware interface active; waiting for joint feedback")
                 await ws_manager.broadcast(snapshot)
             elif "failed to open serial" in lower:
                 snapshot = robot_state.set_launch_state("error")
                 robot_state.update_device("ESP32", "offline", line, SERIAL_PORT)
+                robot_state.update_device("Mobile base", "offline", "Serial hardware activation failed")
                 await ws_manager.broadcast(snapshot)
             elif "controller_manager" in lower or "diff_drive_controller" in lower:
                 snapshot = robot_state.update_device("ros2_control", "online", "Controller launch output detected")

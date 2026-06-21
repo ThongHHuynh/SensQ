@@ -10,6 +10,7 @@ config_local/
 *.local.json
 
 # Generated robot data
+data/
 maps/
 bags/
 recordings/

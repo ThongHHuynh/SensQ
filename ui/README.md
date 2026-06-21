@@ -8,7 +8,7 @@ React + Tailwind frontend for the SensQ robot control interface. This folder is 
 2. Added a Vite React project structure.
 3. Added Tailwind CSS configuration and shared global styles.
 4. Built a responsive left navigation layout with Home, Device Status, Maps, and Settings tabs.
-5. Added mock robot data based on current ROS references, including `HardwareStatus.msg`.
+5. Added mock robot data based on current ROS references, including ros2_control and serial device status.
 6. Added a `services/robotApi.js` boundary so page components do not depend directly on ROS or backend details.
 
 ## Project Structure
@@ -72,7 +72,7 @@ To run the backend and frontend together from the repo root:
 
 ## Notes For ROS Integration
 
-- `Device Status` includes fields from `ros2_ws/src/my_robot_interfaces/msg/HardwareStatus.msg`.
+- `Device Status` tracks ros2_control feedback from `/joint_states` and `/diff_drive_controller/odom`.
 - `Device Status` includes an `ESP32` row for the serial-connected controller used by `my_robot.launch.py`.
 - `Maps` is prepared for future Nav2, SLAM, saved map, and goal-setting workflows.
 - `Settings` includes backend URL, `ROS_DOMAIN_ID`, and realtime transport placeholders.

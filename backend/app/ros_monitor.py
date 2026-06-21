@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from threading import Lock, Thread
 from typing import Callable
 
-from .config import CMD_VEL_TOPIC, HARDWARE_STATUS_TOPIC, JOINT_STATES_TOPIC, ODOM_TOPIC, SERIAL_PORT
+from .config import CMD_VEL_TOPIC, JOINT_STATES_TOPIC, ODOM_TOPIC
 from .database import save_snapshot
 from .state import robot_state
 from .websocket_manager import ws_manager
@@ -12,6 +12,55 @@ from .websocket_manager import ws_manager
 
 def yaw_from_quaternion(z: float, w: float) -> float:
     return math.degrees(math.atan2(2.0 * w * z, 1.0 - 2.0 * z * z))
+
+
+def occupancy_grid_to_payload(msg, max_cells: int = 260) -> dict:
+    width = int(msg.info.width)
+    height = int(msg.info.height)
+    stride = max(1, math.ceil(max(width, height) / max_cells))
+    sampled_width = math.ceil(width / stride)
+    sampled_height = math.ceil(height / stride)
+    source = list(msg.data)
+    sampled = []
+
+    for y in range(0, height, stride):
+        for x in range(0, width, stride):
+            occupied = 0
+            free = 0
+            unknown = 0
+            for yy in range(y, min(y + stride, height)):
+                row = yy * width
+                for xx in range(x, min(x + stride, width)):
+                    value = source[row + xx]
+                    if value < 0:
+                        unknown += 1
+                    elif value >= 50:
+                        occupied += 1
+                    else:
+                        free += 1
+
+            if occupied > 0:
+                sampled.append(100)
+            elif free >= unknown:
+                sampled.append(0)
+            else:
+                sampled.append(-1)
+
+    origin = msg.info.origin
+    return {
+        "frame": msg.header.frame_id or "map",
+        "width": sampled_width,
+        "height": sampled_height,
+        "resolution": round(float(msg.info.resolution) * stride, 4),
+        "origin": {
+            "x": round(float(origin.position.x), 3),
+            "y": round(float(origin.position.y), 3),
+            "yaw": round(yaw_from_quaternion(float(origin.orientation.z), float(origin.orientation.w)), 1),
+        },
+        "data": sampled,
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "status": f"Receiving /map ({width}x{height}, stride {stride})",
+    }
 
 
 class RosMonitor:
@@ -66,17 +115,9 @@ class RosMonitor:
                 return
 
             try:
-                from my_robot_interfaces.msg import HardwareStatus
-            except ImportError as exc:
-                snapshot = robot_state.update(
-                    {"hardwareStatus": {"debug_message": f"HardwareStatus subscription unavailable: {exc}"}}
-                )
-                self._publish(snapshot)
-                HardwareStatus = None
-
-            try:
-                from nav_msgs.msg import Odometry
+                from nav_msgs.msg import OccupancyGrid, Odometry
             except ImportError:
+                OccupancyGrid = None
                 Odometry = None
 
             try:
@@ -86,27 +127,12 @@ class RosMonitor:
                 LaserScan = None
                 Imu = None
 
-            def hardware_cb(msg) -> None:
-                now = datetime.now(timezone.utc).isoformat()
-                snapshot = robot_state.update(
-                    {
-                        "connection": {"lastHeartbeat": now, "launchState": "running"},
-                        "hardwareStatus": {
-                            "temperature": float(msg.temperature),
-                            "are_motors_ready": bool(msg.are_motors_ready),
-                            "debug_message": msg.debug_message,
-                            "updatedAt": now,
-                        },
-                    }
-                )
-                robot_state.update_device("Mobile base", "ready" if msg.are_motors_ready else "warning", msg.debug_message)
-                robot_state.update_device("ESP32", "online", "HardwareStatus received from serial-connected base", SERIAL_PORT)
-                self._publish(snapshot)
-
             def odom_cb(msg) -> None:
+                now = datetime.now(timezone.utc).isoformat()
                 pose = msg.pose.pose
                 snapshot = robot_state.update(
                     {
+                        "connection": {"lastHeartbeat": now, "launchState": "running"},
                         "pose": {
                             "frame": msg.header.frame_id or "odom",
                             "x": round(float(pose.position.x), 3),
@@ -114,11 +140,29 @@ class RosMonitor:
                             "yaw": round(yaw_from_quaternion(float(pose.orientation.z), float(pose.orientation.w)), 1),
                         },
                         "navigation": {"localization": "Receiving odometry"},
+                        "hardwareStatus": {
+                            "are_motors_ready": True,
+                            "debug_message": f"Receiving {ODOM_TOPIC}",
+                            "updatedAt": now,
+                        },
                     }
                 )
+                robot_state.update_device("Mobile base", "ready", f"Receiving odometry from {ODOM_TOPIC}", ODOM_TOPIC)
                 self._publish(snapshot)
 
             def joint_cb(_) -> None:
+                now = datetime.now(timezone.utc).isoformat()
+                robot_state.update(
+                    {
+                        "connection": {"lastHeartbeat": now, "launchState": "running"},
+                        "hardwareStatus": {
+                            "are_motors_ready": True,
+                            "debug_message": f"Receiving {JOINT_STATES_TOPIC}",
+                            "updatedAt": now,
+                        },
+                    }
+                )
+                robot_state.update_device("Mobile base", "ready", f"Receiving wheel joint states from {JOINT_STATES_TOPIC}", JOINT_STATES_TOPIC)
                 snapshot = robot_state.update_device("ros2_control", "online", f"Receiving {JOINT_STATES_TOPIC}")
                 self._publish(snapshot)
 
@@ -130,10 +174,21 @@ class RosMonitor:
                 snapshot = robot_state.update_device("IMU", "online", "Receiving /imu")
                 self._publish(snapshot)
 
-            if HardwareStatus is not None:
-                node.create_subscription(HardwareStatus, HARDWARE_STATUS_TOPIC, hardware_cb, 10)
+            def map_cb(msg) -> None:
+                live_map = occupancy_grid_to_payload(msg)
+                robot_state.update(
+                    {
+                        "liveMap": live_map,
+                        "navigation": {"activeMap": "Live SLAM", "localization": "Map frame active"},
+                    }
+                )
+                snapshot = robot_state.update_device("SLAM", "online", "Receiving /map from slam_toolbox", "/map")
+                self._publish(snapshot)
+
             if Odometry is not None:
                 node.create_subscription(Odometry, ODOM_TOPIC, odom_cb, 10)
+            if OccupancyGrid is not None:
+                node.create_subscription(OccupancyGrid, "/map", map_cb, 10)
             if JointState is not None:
                 node.create_subscription(JointState, JOINT_STATES_TOPIC, joint_cb, 10)
             if LaserScan is not None:

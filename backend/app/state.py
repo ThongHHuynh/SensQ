@@ -18,7 +18,7 @@ def initial_snapshot() -> dict:
         "hardwareStatus": {
             "temperature": None,
             "are_motors_ready": False,
-            "debug_message": "Waiting for ROS hardware status",
+            "debug_message": "Waiting for ros2_control feedback",
             "updatedAt": None,
         },
         "battery": {
@@ -36,9 +36,20 @@ def initial_snapshot() -> dict:
             "state": "Idle",
             "activeMap": "Live SLAM",
             "localization": "Waiting",
+            "mapping": "idle",
+        },
+        "liveMap": {
+            "frame": "map",
+            "width": 0,
+            "height": 0,
+            "resolution": None,
+            "origin": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            "data": [],
+            "updatedAt": None,
+            "status": "Waiting for /map",
         },
         "devices": [
-            {"name": "Mobile base", "topic": "/hardware_status", "status": "offline", "detail": "Waiting for launch"},
+            {"name": "Mobile base", "topic": "/joint_states", "status": "offline", "detail": "Waiting for ros2_control feedback"},
             {"name": "ESP32", "topic": "/dev/ttyACM0", "status": "offline", "detail": "Serial link not confirmed"},
             {"name": "Lidar", "topic": "/scan", "status": "offline", "detail": "Waiting for scan"},
             {"name": "IMU", "topic": "/imu", "status": "offline", "detail": "Waiting for IMU"},
@@ -84,6 +95,15 @@ class RobotState:
 
     def set_launch_state(self, launch_state: str) -> dict:
         return self.update({"connection": {"launchState": launch_state}})
+
+    def set_saved_maps(self, saved_maps: list[dict]) -> dict:
+        base_maps = [
+            {"id": "live", "name": "Live SLAM", "resolution": "From slam_toolbox", "updated": "Not synced"},
+            {"id": "maze", "name": "Maze simulation", "resolution": "0.05 m/px", "updated": "From ros2_ws world reference"},
+        ]
+        self._snapshot["maps"] = saved_maps + base_maps
+        self._snapshot["updatedAt"] = utc_now()
+        return self.get_snapshot()
 
     def _deep_update(self, target: dict, patch: dict) -> None:
         for key, value in patch.items():

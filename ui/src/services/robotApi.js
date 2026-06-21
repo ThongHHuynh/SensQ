@@ -79,6 +79,44 @@ export async function sendTeleopCommand({ linear_x = 0, angular_z = 0 }) {
   return response.json();
 }
 
+export async function startMapping() {
+  const response = await fetch(`${API_BASE_URL}/api/mapping/start`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mapping start failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function stopMapping() {
+  const response = await fetch(`${API_BASE_URL}/api/mapping/stop`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mapping stop failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export async function saveMap(name) {
+  const response = await fetch(`${API_BASE_URL}/api/mapping/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Map save failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export function createRobotStateSocket() {
   return new WebSocket(`${WS_BASE_URL}/ws/robot-state`);
 }

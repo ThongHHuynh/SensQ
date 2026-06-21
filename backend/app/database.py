@@ -1,7 +1,8 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from .config import DATABASE_URL
-from .models import Base, RobotEvent, RobotSnapshot
+from .models import Base, RobotEvent, RobotSnapshot, SavedMap
 
 
 engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
@@ -23,3 +24,18 @@ async def save_snapshot(payload: dict) -> None:
     async with AsyncSessionLocal() as session:
         session.add(RobotSnapshot(payload=payload))
         await session.commit()
+
+
+async def create_saved_map(name: str, yaml_path: str, image_path: str, frame_id: str = "map", resolution: str = "Unknown") -> SavedMap:
+    async with AsyncSessionLocal() as session:
+        saved_map = SavedMap(name=name, yaml_path=yaml_path, image_path=image_path, frame_id=frame_id, resolution=resolution)
+        session.add(saved_map)
+        await session.commit()
+        await session.refresh(saved_map)
+        return saved_map
+
+
+async def list_saved_maps() -> list[SavedMap]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(SavedMap).order_by(SavedMap.created_at.desc()))
+        return list(result.scalars().all())

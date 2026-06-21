@@ -7,7 +7,7 @@ function DeviceStatusPage({ robot }) {
     typeof robot.hardwareStatus.temperature === "number" ? `${robot.hardwareStatus.temperature.toFixed(1)} C` : "Waiting";
   const motorsReady =
     typeof robot.hardwareStatus.are_motors_ready === "boolean" ? String(robot.hardwareStatus.are_motors_ready) : "Waiting";
-  const debugMessage = robot.hardwareStatus.debug_message || "Waiting for ROS hardware status";
+  const debugMessage = robot.hardwareStatus.debug_message || "Waiting for ros2_control feedback";
 
   return (
     <>
@@ -41,7 +41,7 @@ function DeviceStatusPage({ robot }) {
       </section>
 
       <section className="mt-6 rounded-md border border-console-line bg-white p-5 shadow-soft">
-        <h2 className="text-lg font-semibold tracking-normal">HardwareStatus message</h2>
+        <h2 className="text-lg font-semibold tracking-normal">ros2_control feedback</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <Field label="temperature" value={temperature} />
           <Field label="are_motors_ready" value={motorsReady} />

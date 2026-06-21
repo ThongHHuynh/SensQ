@@ -1,12 +1,30 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CircleStop, Crosshair, Gamepad2, LocateFixed, MapPinned } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  CircleStop,
+  Crosshair,
+  Disc3,
+  Gamepad2,
+  LocateFixed,
+  MapPinned,
+  Play,
+  Save,
+  Square
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader.jsx";
-import { sendTeleopCommand, startTeleop, stopTeleop } from "../services/robotApi.js";
+import { saveMap, sendTeleopCommand, startMapping, startTeleop, stopMapping, stopTeleop } from "../services/robotApi.js";
 
 function MapsPage({ robot }) {
   const maps = Array.isArray(robot.maps) ? robot.maps : [];
   const pose = robot.pose ?? {};
   const navigation = robot.navigation ?? {};
+  const liveMap = robot.liveMap ?? {};
+  const mappingState = navigation.mapping ?? "idle";
+  const [mapName, setMapName] = useState("Lab map");
+  const [mappingMessage, setMappingMessage] = useState("Start mapping, drive the robot, then save the map.");
   const [teleopReady, setTeleopReady] = useState(false);
   const [teleopStatus, setTeleopStatus] = useState("idle");
   const [teleopMessage, setTeleopMessage] = useState("Start teleop before sending web drive commands.");
@@ -50,6 +68,33 @@ function MapsPage({ robot }) {
     }
   }
 
+  async function handleStartMapping() {
+    try {
+      const result = await startMapping();
+      setMappingMessage(result.message || "Mapping started");
+    } catch (err) {
+      setMappingMessage(err.message);
+    }
+  }
+
+  async function handleStopMapping() {
+    try {
+      const result = await stopMapping();
+      setMappingMessage(result.message || "Mapping stopped");
+    } catch (err) {
+      setMappingMessage(err.message);
+    }
+  }
+
+  async function handleSaveMap() {
+    try {
+      const result = await saveMap(mapName);
+      setMappingMessage(result.message || "Map saved");
+    } catch (err) {
+      setMappingMessage(err.message);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -72,17 +117,15 @@ function MapsPage({ robot }) {
 
       <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="relative min-h-[420px] overflow-hidden rounded-md border border-console-line bg-white shadow-soft">
-          <div className="map-grid absolute inset-0 bg-[#f8fafc]" />
-          <div className="absolute left-[52%] top-[48%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-signal-info text-white shadow-soft">
-              <MapPinned className="h-6 w-6" aria-hidden="true" />
-            </div>
-            <div className="mt-2 rounded-md bg-console-rail px-2 py-1 text-xs font-semibold text-white">
-              x {pose.x ?? 0}, y {pose.y ?? 0}, yaw {pose.yaw ?? 0} deg
-            </div>
-          </div>
+          <LiveMapCanvas liveMap={liveMap} />
           <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm shadow-soft">
             Active map: {navigation.activeMap ?? "Waiting"}
+          </div>
+          <div className="absolute right-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm shadow-soft">
+            <div className="font-semibold text-console-ink">Robot pose</div>
+            <div className="mt-1 font-mono text-xs text-slate-600">
+              {pose.frame ?? "odom"} x {pose.x ?? 0}, y {pose.y ?? 0}, yaw {pose.yaw ?? 0} deg
+            </div>
           </div>
         </div>
 
@@ -103,6 +146,57 @@ function MapsPage({ robot }) {
             {maps.length === 0 ? <div className="text-sm text-slate-500">Waiting for map metadata.</div> : null}
           </div>
         </aside>
+      </section>
+
+      <section className="mt-4 rounded-md border border-console-line bg-white p-5 shadow-soft">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Disc3 className="h-5 w-5 text-signal-info" aria-hidden="true" />
+              <h2 className="text-lg font-semibold tracking-normal">Mapping</h2>
+              <MappingStatusLight status={mappingState} />
+            </div>
+            <p className="mt-1 text-sm text-slate-600">{mappingMessage}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleStartMapping}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+            >
+              <Play className="h-4 w-4" aria-hidden="true" />
+              Start Mapping
+            </button>
+            <button
+              type="button"
+              onClick={handleStopMapping}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+            >
+              <Square className="h-4 w-4" aria-hidden="true" />
+              Stop Mapping
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-slate-600">Map name</span>
+            <input
+              className="h-10 w-full rounded-md border border-console-line px-3"
+              value={mapName}
+              onChange={(event) => setMapName(event.target.value)}
+              placeholder="Enter map name"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSaveMap}
+            className="inline-flex h-10 items-center gap-2 self-end rounded-md bg-signal-info px-3 text-sm font-semibold text-white"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
+            Save Map
+          </button>
+        </div>
       </section>
 
       <section className="mt-4 rounded-md border border-console-line bg-white p-5 shadow-soft">
@@ -156,6 +250,92 @@ function MapsPage({ robot }) {
         </div>
       </section>
     </>
+  );
+}
+
+function MappingStatusLight({ status }) {
+  const styles = {
+    idle: "bg-slate-300",
+    active: "bg-emerald-500",
+    saving: "bg-amber-400",
+    error: "bg-orange-600"
+  };
+
+  const labels = {
+    idle: "Mapping idle",
+    active: "Mapping active",
+    saving: "Saving map",
+    error: "Mapping error"
+  };
+
+  return (
+    <span className="inline-flex items-center gap-2 rounded-md border border-console-line bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+      <span className={`h-2.5 w-2.5 rounded-full ${styles[status] ?? styles.idle}`} aria-hidden="true" />
+      {labels[status] ?? labels.idle}
+    </span>
+  );
+}
+
+function LiveMapCanvas({ liveMap }) {
+  const canvasRef = useRef(null);
+  const hasMap = Array.isArray(liveMap.data) && liveMap.data.length > 0 && liveMap.width > 0 && liveMap.height > 0;
+
+  useEffect(() => {
+    if (!hasMap || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const width = Number(liveMap.width);
+    const height = Number(liveMap.height);
+    const scale = Math.max(1, Math.floor(720 / Math.max(width, height)));
+    canvas.width = width * scale;
+    canvas.height = height * scale;
+
+    ctx.fillStyle = "#d8dde7";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const value = liveMap.data[y * width + x];
+        if (value < 0) {
+          ctx.fillStyle = "#cfd5df";
+        } else if (value >= 50) {
+          ctx.fillStyle = "#111827";
+        } else {
+          ctx.fillStyle = "#ffffff";
+        }
+
+        const canvasY = height - y - 1;
+        ctx.fillRect(x * scale, canvasY * scale, scale, scale);
+      }
+    }
+  }, [hasMap, liveMap]);
+
+  if (!hasMap) {
+    return (
+      <div className="map-grid absolute inset-0 flex items-center justify-center bg-[#f8fafc]">
+        <div className="rounded-md border border-console-line bg-white px-4 py-3 text-sm text-slate-600 shadow-soft">
+          Waiting for `/map` from slam_toolbox
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-[#d8dde7]">
+      <canvas ref={canvasRef} className="max-h-full max-w-full object-contain [image-rendering:pixelated]" />
+      <div className="absolute left-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-xs text-slate-600 shadow-soft">
+        <div className="font-semibold text-console-ink">/map</div>
+        <div className="mt-1">{liveMap.width} x {liveMap.height}</div>
+        <div>{liveMap.resolution ?? "?"} m/px</div>
+        <div>{liveMap.status ?? "Receiving map"}</div>
+      </div>
+      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-signal-info text-white shadow-soft">
+          <MapPinned className="h-5 w-5" aria-hidden="true" />
+        </div>
+      </div>
+    </div>
   );
 }
 

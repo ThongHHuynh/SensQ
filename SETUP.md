@@ -169,7 +169,7 @@ If the teleop process starts but the UI says:
 ROS publisher is not available
 ```
 
-restart the orchestrator after pulling the latest code. The backend now creates the `/cmd_vel` publisher even if optional status subscriptions such as `my_robot_interfaces/HardwareStatus` are unavailable.
+restart the orchestrator after pulling the latest code. The backend creates the `/cmd_vel` publisher independently from optional status subscriptions.
 
 You can also check that the ROS environment is available before running the backend:
 
@@ -177,6 +177,57 @@ You can also check that the ROS environment is available before running the back
 source /opt/ros/humble/setup.bash
 source /home/tom/SensQ/ros2_ws/install/setup.bash
 ros2 topic list
+```
+
+## Live Map Display
+
+The Maps tab renders the ROS occupancy grid from:
+
+```text
+/map
+```
+
+This matches the normal RViz workflow of setting the fixed frame to `map` and adding the Map display. The backend subscribes to `/map`, downsamples large occupancy grids for browser performance, then streams the map to the frontend over WebSocket.
+
+To verify that SLAM is publishing:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/tom/SensQ/ros2_ws/install/setup.bash
+ros2 topic echo /map --once
+```
+
+If the Maps tab says it is waiting for `/map`, drive the robot after launching `my_robot.launch.py` and confirm `slam_toolbox` is running.
+
+## Mapping Controls And Saving Maps
+
+The Maps tab has controls for:
+
+- Start Mapping
+- Stop Mapping
+- Save Map
+- custom map name
+
+`my_robot.launch.py` already starts `slam_toolbox`, so Start Mapping marks the backend/UI mapping session active and waits for `/map`.
+
+Save Map calls:
+
+```bash
+ros2 run nav2_map_server map_saver_cli -f <map_path>
+```
+
+Saved map files are written to:
+
+```text
+/home/tom/SensQ/data/maps/
+```
+
+The backend also stores saved map metadata in PostgreSQL in the `saved_maps` table. Saved maps then appear in Available Maps.
+
+If saving fails, make sure `nav2_map_server` is installed:
+
+```bash
+sudo apt install -y ros-humble-nav2-map-server
 ```
 
 The orchestrator starts:
@@ -260,6 +311,7 @@ If the backend reports one of these Jetson errors:
 ModuleNotFoundError: No module named 'asyncpg.protocol.protocol'
 ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'
 ValueError: the greenlet library is required to use this function. No module named 'greenlet._greenlet'
+ROS command publisher disabled: No module named 'numpy'
 ```
 
 then a compiled Python dependency is missing or corrupted inside the virtualenv. Repair it with:
@@ -268,7 +320,7 @@ then a compiled Python dependency is missing or corrupted inside the virtualenv.
 cd /home/tom/SensQ/backend
 source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
-pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic
+pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic numpy
 pip install -r requirements.txt
 ```
 
@@ -290,7 +342,7 @@ If packages build from source and fail, install build tools and retry:
 sudo apt install -y build-essential python3-dev rustc cargo
 cd /home/tom/SensQ/backend
 source .venv/bin/activate
-pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic
+pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic numpy
 ```
 
 Check frontend:

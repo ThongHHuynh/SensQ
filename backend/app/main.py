@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from .database import init_db, save_event, save_snapshot
 from .launch_manager import launch_manager
+from .mapping_manager import mapping_manager
 from .ros_monitor import create_monitor
 from .state import robot_state
 from .teleop_manager import teleop_manager
@@ -19,6 +20,10 @@ ros_monitor = None
 class CmdVelRequest(BaseModel):
     linear_x: float = Field(0.0, ge=-0.5, le=0.5)
     angular_z: float = Field(0.0, ge=-1.5, le=1.5)
+
+
+class SaveMapRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,6 +39,7 @@ async def startup() -> None:
     global ros_monitor
     await init_db()
     await save_event("backend", "Backend started")
+    await mapping_manager.load_saved_maps_into_state()
     loop = asyncio.get_running_loop()
     ros_monitor = create_monitor(loop)
     ros_monitor.start()
@@ -84,6 +90,27 @@ async def teleop_cmd_vel(command: CmdVelRequest) -> dict:
         "linear_x": command.linear_x,
         "angular_z": command.angular_z,
     }
+
+
+@app.get("/api/maps")
+async def saved_maps() -> dict:
+    snapshot = await mapping_manager.load_saved_maps_into_state()
+    return {"maps": snapshot["maps"]}
+
+
+@app.post("/api/mapping/start")
+async def start_mapping() -> dict:
+    return await mapping_manager.start()
+
+
+@app.post("/api/mapping/stop")
+async def stop_mapping() -> dict:
+    return await mapping_manager.stop()
+
+
+@app.post("/api/mapping/save")
+async def save_map(request: SaveMapRequest) -> dict:
+    return await mapping_manager.save(request.name)
 
 
 @app.websocket("/ws/robot-state")

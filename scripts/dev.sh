@@ -59,7 +59,30 @@ require_command() {
 trap cleanup EXIT INT TERM
 
 require_command npm
+require_command node
 require_command python3
+
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if (( NODE_MAJOR < 18 )); then
+  cat >&2 <<EOF
+Node.js $NODE_MAJOR is too old for the SensQ UI.
+
+Install Node.js 18 or newer, then reinstall frontend dependencies:
+
+  cd $UI_DIR
+  rm -rf node_modules package-lock.json
+  npm install
+
+Recommended options:
+
+  nvm install 20
+  nvm use 20
+
+or install Node.js 20 from NodeSource.
+
+EOF
+  exit 1
+fi
 
 require_file "$BACKEND_DIR/.venv/bin/activate" "Backend virtualenv missing. Run: cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
 require_file "$UI_DIR/node_modules" "Frontend dependencies missing. Run: cd ui && npm install"
@@ -86,7 +109,9 @@ EOF
   exit 1
 fi
 
-if ! DATABASE_URL="$DATABASE_URL" "$BACKEND_DIR/.venv/bin/python" - <<'PY' >/dev/null 2>&1
+set +e
+DB_CHECK_OUTPUT="$(
+DATABASE_URL="$DATABASE_URL" "$BACKEND_DIR/.venv/bin/python" - <<'PY' 2>&1
 import asyncio
 import os
 
@@ -101,11 +126,19 @@ async def main() -> None:
 
 asyncio.run(main())
 PY
-then
+)"
+DB_CHECK_STATUS="$?"
+set -e
+
+if [[ "$DB_CHECK_STATUS" -ne 0 ]]; then
   cat >&2 <<EOF
 PostgreSQL is running, but the backend cannot log in with:
 
   $DATABASE_URL
+
+Backend database check error:
+
+$DB_CHECK_OUTPUT
 
 Fix one of these:
 
@@ -113,10 +146,16 @@ Fix one of these:
 
      sudo -u postgres psql
      ALTER USER sensq WITH PASSWORD 'sensq';
-     CREATE DATABASE sensq OWNER sensq;
+     ALTER DATABASE sensq OWNER TO sensq;
      \\q
 
-  2. Or run with your real database URL:
+  2. Reinstall backend Python dependencies:
+
+     cd $BACKEND_DIR
+     source .venv/bin/activate
+     pip install -r requirements.txt
+
+  3. Or run with your real database URL:
 
      DATABASE_URL="postgresql+asyncpg://USER:PASSWORD@localhost:5432/DB_NAME" ./scripts/dev.sh
 

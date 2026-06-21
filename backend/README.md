@@ -49,8 +49,11 @@ sudo -u postgres psql
 
 ```sql
 ALTER USER sensq WITH PASSWORD 'sensq';
+ALTER DATABASE sensq OWNER TO sensq;
 \q
 ```
+
+Run those SQL commands only inside the `postgres=#` prompt. After `\q`, SQL typed in the terminal will be interpreted by Bash and fail.
 
 ## Run
 

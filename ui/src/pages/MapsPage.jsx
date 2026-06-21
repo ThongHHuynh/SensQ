@@ -12,6 +12,7 @@ import {
   Play,
   Pencil,
   Save,
+  Send,
   Square
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -29,6 +30,8 @@ function MapsPage({ robot }) {
   const [editingMapId, setEditingMapId] = useState(null);
   const [editingMapName, setEditingMapName] = useState("");
   const [mappingMessage, setMappingMessage] = useState("Start mapping, drive the robot, then save the map.");
+  const [linearSpeed, setLinearSpeed] = useState(0.2);
+  const [angularSpeed, setAngularSpeed] = useState(0.6);
   const [teleopReady, setTeleopReady] = useState(false);
   const [teleopStatus, setTeleopStatus] = useState("idle");
   const [teleopMessage, setTeleopMessage] = useState("Start teleop before sending web drive commands.");
@@ -219,53 +222,92 @@ function MapsPage({ robot }) {
         </aside>
       </section>
 
-      <section className="mt-4 rounded-md border border-console-line bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Disc3 className="h-5 w-5 text-signal-info" aria-hidden="true" />
-              <h2 className="text-lg font-semibold tracking-normal">Mapping</h2>
-              <MappingStatusLight status={mappingState} />
+      <section className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Disc3 className="h-5 w-5 text-signal-info" aria-hidden="true" />
+                <h2 className="text-lg font-semibold tracking-normal">Mapping</h2>
+                <MappingStatusLight status={mappingState} />
+              </div>
+              <p className="mt-1 text-sm text-slate-600">{mappingMessage}</p>
             </div>
-            <p className="mt-1 text-sm text-slate-600">{mappingMessage}</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleStartMapping}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                Start
+              </button>
+              <button
+                type="button"
+                onClick={handleStopMapping}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+              >
+                <Square className="h-4 w-4" aria-hidden="true" />
+                Stop
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Map name</span>
+              <input
+                className="h-10 w-full rounded-md border border-console-line px-3"
+                value={mapName}
+                onChange={(event) => setMapName(event.target.value)}
+                placeholder="Enter map name"
+              />
+            </label>
             <button
               type="button"
-              onClick={handleStartMapping}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+              onClick={handleSaveMap}
+              className="inline-flex h-10 items-center gap-2 self-end rounded-md bg-signal-info px-3 text-sm font-semibold text-white"
             >
-              <Play className="h-4 w-4" aria-hidden="true" />
-              Start Mapping
-            </button>
-            <button
-              type="button"
-              onClick={handleStopMapping}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
-            >
-              <Square className="h-4 w-4" aria-hidden="true" />
-              Stop Mapping
+              <Save className="h-4 w-4" aria-hidden="true" />
+              Save Map
             </button>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-slate-600">Map name</span>
-            <input
-              className="h-10 w-full rounded-md border border-console-line px-3"
-              value={mapName}
-              onChange={(event) => setMapName(event.target.value)}
-              placeholder="Enter map name"
-            />
-          </label>
+        <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Crosshair className="h-5 w-5 text-signal-info" aria-hidden="true" />
+                <h2 className="text-lg font-semibold tracking-normal">Navigation</h2>
+                <span className="inline-flex items-center gap-2 rounded-md border border-console-line bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+                  <span className="h-2.5 w-2.5 rounded-full bg-slate-300" aria-hidden="true" />
+                  Goal idle
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">Goal selection controls will use this panel.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Goal X</span>
+              <input className="h-10 w-full rounded-md border border-console-line px-3" defaultValue="0.0" />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Goal Y</span>
+              <input className="h-10 w-full rounded-md border border-console-line px-3" defaultValue="0.0" />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Yaw</span>
+              <input className="h-10 w-full rounded-md border border-console-line px-3" defaultValue="0" />
+            </label>
+          </div>
           <button
             type="button"
-            onClick={handleSaveMap}
-            className="inline-flex h-10 items-center gap-2 self-end rounded-md bg-signal-info px-3 text-sm font-semibold text-white"
+            className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
           >
-            <Save className="h-4 w-4" aria-hidden="true" />
-            Save Map
+            <Send className="h-4 w-4" aria-hidden="true" />
+            Send Goal
           </button>
         </div>
       </section>
@@ -303,20 +345,41 @@ function MapsPage({ robot }) {
         <div className="mt-5 grid gap-4 lg:grid-cols-[220px_1fr]">
           <div className="grid w-[180px] grid-cols-3 gap-2 justify-self-center lg:justify-self-start">
             <div />
-            <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(0.2, 0)} />
+            <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(linearSpeed, 0)} />
             <div />
-            <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, 0.6)} />
+            <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, angularSpeed)} />
             <TeleopButton disabled={!teleopReady} label="Stop" icon={CircleStop} onClick={() => handleDrive(0, 0)} tone="stop" />
-            <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -0.6)} />
+            <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -angularSpeed)} />
             <div />
-            <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-0.2, 0)} />
+            <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-linearSpeed, 0)} />
             <div />
           </div>
 
           <div className="rounded-md border border-console-line bg-console-panel p-4 text-sm text-slate-600">
-            <div className="font-semibold text-console-ink">Command mapping</div>
+            <div className="font-semibold text-console-ink">Speed</div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <SpeedControl
+                label="Linear"
+                value={linearSpeed}
+                min={0.05}
+                max={0.5}
+                step={0.05}
+                unit="m/s"
+                onChange={setLinearSpeed}
+              />
+              <SpeedControl
+                label="Angular"
+                value={angularSpeed}
+                min={0.1}
+                max={1.5}
+                step={0.1}
+                unit="rad/s"
+                onChange={setAngularSpeed}
+              />
+            </div>
+            <div className="mt-4 font-semibold text-console-ink">Command mapping</div>
             <div className="mt-2 font-mono">ros2 run teleop_twist_keyboard teleop_twist_keyboard</div>
-            <div className="mt-3">The website buttons publish bounded `geometry_msgs/Twist` commands to `/cmd_vel` through FastAPI.</div>
+            <div className="mt-3">Buttons publish bounded `geometry_msgs/Twist` commands to `/cmd_vel` through FastAPI.</div>
           </div>
         </div>
       </section>
@@ -450,6 +513,43 @@ function TeleopButton({ disabled, label, icon: Icon, onClick, tone = "default" }
     >
       <Icon className="h-5 w-5" aria-hidden="true" />
     </button>
+  );
+}
+
+function SpeedControl({ label, value, min, max, step, unit, onChange }) {
+  function update(nextValue) {
+    const parsed = Number(nextValue);
+    if (Number.isNaN(parsed)) return;
+    onChange(Math.max(min, Math.min(max, parsed)));
+  }
+
+  return (
+    <label className="block">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-slate-600">{label}</span>
+        <span className="font-mono text-xs text-slate-500">
+          {value.toFixed(2)} {unit}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => update(event.target.value)}
+        className="w-full"
+      />
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => update(event.target.value)}
+        className="mt-2 h-9 w-full rounded-md border border-console-line px-2"
+      />
+    </label>
   );
 }
 

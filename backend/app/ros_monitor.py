@@ -2,6 +2,7 @@ import asyncio
 import math
 from datetime import datetime, timezone
 from threading import Lock, Thread
+from time import monotonic
 from typing import Callable
 
 from .config import CMD_VEL_TOPIC, JOINT_STATES_TOPIC, ODOM_TOPIC
@@ -217,8 +218,17 @@ class RosMonitor:
 
 
 def create_monitor(loop: asyncio.AbstractEventLoop) -> RosMonitor:
+    snapshot_interval_seconds = 5.0
+    last_snapshot_at = 0.0
+
     def publish(snapshot: dict) -> None:
+        nonlocal last_snapshot_at
+
         asyncio.run_coroutine_threadsafe(ws_manager.broadcast(snapshot), loop)
-        asyncio.run_coroutine_threadsafe(save_snapshot(snapshot), loop)
+
+        now = monotonic()
+        if now - last_snapshot_at >= snapshot_interval_seconds:
+            last_snapshot_at = now
+            asyncio.run_coroutine_threadsafe(save_snapshot(snapshot), loop)
 
     return RosMonitor(publish)

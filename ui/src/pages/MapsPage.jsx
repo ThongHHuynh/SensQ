@@ -115,13 +115,13 @@ function MapsPage({ robot }) {
         }
       />
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="relative min-h-[420px] overflow-hidden rounded-md border border-console-line bg-white shadow-soft">
+      <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
+        <div className="relative min-h-[72vh] overflow-hidden rounded-md border border-console-line bg-white">
           <LiveMapCanvas liveMap={liveMap} />
-          <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm shadow-soft">
+          <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
             Active map: {navigation.activeMap ?? "Waiting"}
           </div>
-          <div className="absolute right-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm shadow-soft">
+          <div className="absolute right-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
             <div className="font-semibold text-console-ink">Robot pose</div>
             <div className="mt-1 font-mono text-xs text-slate-600">
               {pose.frame ?? "odom"} x {pose.x ?? 0}, y {pose.y ?? 0}, yaw {pose.yaw ?? 0} deg
@@ -129,7 +129,7 @@ function MapsPage({ robot }) {
           </div>
         </div>
 
-        <aside className="rounded-md border border-console-line bg-white p-5 shadow-soft">
+        <aside className="rounded-md border border-console-line bg-white p-5">
           <h2 className="text-lg font-semibold tracking-normal">Available maps</h2>
           <div className="mt-4 space-y-3">
             {maps.map((map) => (
@@ -287,7 +287,7 @@ function LiveMapCanvas({ liveMap }) {
     const ctx = canvas.getContext("2d");
     const width = Number(liveMap.width);
     const height = Number(liveMap.height);
-    const scale = Math.max(1, Math.floor(720 / Math.max(width, height)));
+    const scale = Math.max(1, Math.floor(1200 / Math.max(width, height)));
     canvas.width = width * scale;
     canvas.height = height * scale;
 
@@ -314,7 +314,7 @@ function LiveMapCanvas({ liveMap }) {
   if (!hasMap) {
     return (
       <div className="map-grid absolute inset-0 flex items-center justify-center bg-[#f8fafc]">
-        <div className="rounded-md border border-console-line bg-white px-4 py-3 text-sm text-slate-600 shadow-soft">
+        <div className="rounded-md border border-console-line bg-white px-4 py-3 text-sm text-slate-600">
           Waiting for `/map` from slam_toolbox
         </div>
       </div>
@@ -323,15 +323,15 @@ function LiveMapCanvas({ liveMap }) {
 
   return (
     <div className="absolute inset-0 flex items-center justify-center bg-[#d8dde7]">
-      <canvas ref={canvasRef} className="max-h-full max-w-full object-contain [image-rendering:pixelated]" />
-      <div className="absolute left-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-xs text-slate-600 shadow-soft">
+      <canvas ref={canvasRef} className="h-full w-full object-contain [image-rendering:pixelated]" />
+      <div className="absolute left-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-xs text-slate-600">
         <div className="font-semibold text-console-ink">/map</div>
         <div className="mt-1">{liveMap.width} x {liveMap.height}</div>
         <div>{liveMap.resolution ?? "?"} m/px</div>
         <div>{liveMap.status ?? "Receiving map"}</div>
       </div>
       <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-signal-info text-white shadow-soft">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-signal-info text-white">
           <MapPinned className="h-5 w-5" aria-hidden="true" />
         </div>
       </div>

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import signal
 from pathlib import Path
 
 from .config import ROS_DISTRO, ROS_WORKSPACE, SERIAL_PORT
@@ -39,6 +40,7 @@ class LaunchManager:
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
         )
 
         snapshot = robot_state.set_launch_state("starting")
@@ -57,11 +59,24 @@ class LaunchManager:
 
     async def stop(self) -> dict:
         if self._process and self._process.returncode is None:
-            self._process.terminate()
+            try:
+                os.killpg(self._process.pid, signal.SIGINT)
+            except ProcessLookupError:
+                pass
             try:
                 await asyncio.wait_for(self._process.wait(), timeout=8)
             except asyncio.TimeoutError:
-                self._process.kill()
+                try:
+                    os.killpg(self._process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(self._process.wait(), timeout=4)
+                except asyncio.TimeoutError:
+                    try:
+                        os.killpg(self._process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 await self._process.wait()
 
         if self._log_task:
@@ -70,6 +85,9 @@ class LaunchManager:
         snapshot = robot_state.set_launch_state("stopped")
         robot_state.update_device("Mobile base", "offline", "Launch stopped")
         robot_state.update_device("ESP32", "offline", "Launch stopped", SERIAL_PORT)
+        robot_state.update_device("Lidar", "offline", "Launch stopped")
+        robot_state.update_device("SLAM", "offline", "Launch stopped")
+        robot_state.update_device("ros2_control", "offline", "Launch stopped")
         await save_event("launch", "Stopped my_robot.launch.py")
         await ws_manager.broadcast(snapshot)
         return robot_state.get_snapshot()

@@ -230,6 +230,16 @@ If saving fails, make sure `nav2_map_server` is installed:
 sudo apt install -y ros-humble-nav2-map-server
 ```
 
+## PostgreSQL Pool Timeout
+
+If the backend reports:
+
+```text
+sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached
+```
+
+restart the orchestrator after pulling the latest code. The backend streams live robot state over WebSocket but throttles PostgreSQL snapshot history writes so high-rate ROS topics such as `/joint_states`, `/odom`, and `/map` do not exhaust database connections.
+
 The orchestrator starts:
 
 - FastAPI backend on `http://localhost:8000`

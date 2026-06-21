@@ -33,7 +33,8 @@ export const robotSnapshot = {
     { name: "Lidar", topic: "/scan", status: "online", detail: "A1 profile expected" },
     { name: "IMU", topic: "/imu", status: "online", detail: "Publishing orientation" },
     { name: "ros2_control", topic: "/controller_manager", status: "simulated", detail: "Bridge pending" },
-    { name: "SLAM", topic: "/map", status: "simulated", detail: "Bridge pending" }
+    { name: "SLAM", topic: "/map", status: "simulated", detail: "Bridge pending" },
+    { name: "Web teleop", topic: "/cmd_vel", status: "simulated", detail: "Backend publisher placeholder" }
   ],
   maps: [
     { id: "lab", name: "Lab floor draft", resolution: "0.05 m/px", updated: "Not synced" },

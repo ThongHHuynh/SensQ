@@ -44,6 +44,7 @@ def initial_snapshot() -> dict:
             {"name": "IMU", "topic": "/imu", "status": "offline", "detail": "Waiting for IMU"},
             {"name": "ros2_control", "topic": "/controller_manager", "status": "offline", "detail": "Controllers not confirmed"},
             {"name": "SLAM", "topic": "/map", "status": "offline", "detail": "Waiting for map"},
+            {"name": "Web teleop", "topic": "/cmd_vel", "status": "offline", "detail": "Waiting for ROS publisher"},
         ],
         "maps": [
             {"id": "live", "name": "Live SLAM", "resolution": "From slam_toolbox", "updated": "Not synced"},

@@ -27,14 +27,11 @@ class RosMonitor:
         try:
             import rclpy
             from geometry_msgs.msg import Twist
-            from my_robot_interfaces.msg import HardwareStatus
-            from nav_msgs.msg import Odometry
-            from sensor_msgs.msg import JointState, LaserScan, Imu
         except ImportError as exc:
             snapshot = robot_state.update(
                 {
                     "connection": {"lastHeartbeat": "ROS Python imports unavailable"},
-                    "hardwareStatus": {"debug_message": f"ROS monitor disabled: {exc}"},
+                    "hardwareStatus": {"debug_message": f"ROS command publisher disabled: {exc}"},
                 }
             )
             self._publish(snapshot)
@@ -49,7 +46,31 @@ class RosMonitor:
                 self._twist_type = Twist
                 self._ros_available = True
 
-            def hardware_cb(msg: HardwareStatus) -> None:
+            snapshot = robot_state.update_device("Web teleop", "online", f"Publishing {CMD_VEL_TOPIC}", CMD_VEL_TOPIC)
+            self._publish(snapshot)
+
+            try:
+                from my_robot_interfaces.msg import HardwareStatus
+            except ImportError as exc:
+                snapshot = robot_state.update(
+                    {"hardwareStatus": {"debug_message": f"HardwareStatus subscription unavailable: {exc}"}}
+                )
+                self._publish(snapshot)
+                HardwareStatus = None
+
+            try:
+                from nav_msgs.msg import Odometry
+            except ImportError:
+                Odometry = None
+
+            try:
+                from sensor_msgs.msg import JointState, LaserScan, Imu
+            except ImportError:
+                JointState = None
+                LaserScan = None
+                Imu = None
+
+            def hardware_cb(msg) -> None:
                 now = datetime.now(timezone.utc).isoformat()
                 snapshot = robot_state.update(
                     {
@@ -66,7 +87,7 @@ class RosMonitor:
                 robot_state.update_device("ESP32", "online", "HardwareStatus received from serial-connected base", SERIAL_PORT)
                 self._publish(snapshot)
 
-            def odom_cb(msg: Odometry) -> None:
+            def odom_cb(msg) -> None:
                 pose = msg.pose.pose
                 snapshot = robot_state.update(
                     {
@@ -81,23 +102,28 @@ class RosMonitor:
                 )
                 self._publish(snapshot)
 
-            def joint_cb(_: JointState) -> None:
+            def joint_cb(_) -> None:
                 snapshot = robot_state.update_device("ros2_control", "online", f"Receiving {JOINT_STATES_TOPIC}")
                 self._publish(snapshot)
 
-            def scan_cb(_: LaserScan) -> None:
+            def scan_cb(_) -> None:
                 snapshot = robot_state.update_device("Lidar", "online", "Receiving /scan")
                 self._publish(snapshot)
 
-            def imu_cb(_: Imu) -> None:
+            def imu_cb(_) -> None:
                 snapshot = robot_state.update_device("IMU", "online", "Receiving /imu")
                 self._publish(snapshot)
 
-            node.create_subscription(HardwareStatus, HARDWARE_STATUS_TOPIC, hardware_cb, 10)
-            node.create_subscription(Odometry, ODOM_TOPIC, odom_cb, 10)
-            node.create_subscription(JointState, JOINT_STATES_TOPIC, joint_cb, 10)
-            node.create_subscription(LaserScan, "/scan", scan_cb, 10)
-            node.create_subscription(Imu, "/imu", imu_cb, 10)
+            if HardwareStatus is not None:
+                node.create_subscription(HardwareStatus, HARDWARE_STATUS_TOPIC, hardware_cb, 10)
+            if Odometry is not None:
+                node.create_subscription(Odometry, ODOM_TOPIC, odom_cb, 10)
+            if JointState is not None:
+                node.create_subscription(JointState, JOINT_STATES_TOPIC, joint_cb, 10)
+            if LaserScan is not None:
+                node.create_subscription(LaserScan, "/scan", scan_cb, 10)
+            if Imu is not None:
+                node.create_subscription(Imu, "/imu", imu_cb, 10)
             rclpy.spin(node)
 
         self._thread = Thread(target=run, daemon=True)

@@ -161,6 +161,24 @@ http://<JETSON_IP>:5200/
 
 Without `PUBLIC_HOST`, the frontend uses `localhost` for API calls. From another computer, `localhost` points to that computer, not the Jetson, causing browser `NetworkError when attempting to fetch resource`.
 
+## Web Teleop Troubleshooting
+
+If the teleop process starts but the UI says:
+
+```text
+ROS publisher is not available
+```
+
+restart the orchestrator after pulling the latest code. The backend now creates the `/cmd_vel` publisher even if optional status subscriptions such as `my_robot_interfaces/HardwareStatus` are unavailable.
+
+You can also check that the ROS environment is available before running the backend:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/tom/SensQ/ros2_ws/install/setup.bash
+ros2 topic list
+```
+
 The orchestrator starts:
 
 - FastAPI backend on `http://localhost:8000`

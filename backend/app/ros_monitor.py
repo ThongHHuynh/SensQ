@@ -22,32 +22,48 @@ class RosMonitor:
         self._cmd_vel_publisher = None
         self._twist_type = None
         self._ros_available = False
+        self._status_message = "ROS monitor has not started"
 
     def start(self) -> None:
         try:
             import rclpy
             from geometry_msgs.msg import Twist
         except ImportError as exc:
+            message = f"ROS command publisher disabled: {exc}"
+            with self._lock:
+                self._status_message = message
+
             snapshot = robot_state.update(
                 {
                     "connection": {"lastHeartbeat": "ROS Python imports unavailable"},
-                    "hardwareStatus": {"debug_message": f"ROS command publisher disabled: {exc}"},
+                    "hardwareStatus": {"debug_message": message},
                 }
             )
+            robot_state.update_device("Web teleop", "offline", message, CMD_VEL_TOPIC)
             self._publish(snapshot)
             return
 
         def run() -> None:
-            rclpy.init(args=None)
-            node = rclpy.create_node("sensq_backend_monitor")
-            cmd_vel_publisher = node.create_publisher(Twist, CMD_VEL_TOPIC, 10)
-            with self._lock:
-                self._cmd_vel_publisher = cmd_vel_publisher
-                self._twist_type = Twist
-                self._ros_available = True
+            try:
+                rclpy.init(args=None)
+                node = rclpy.create_node("sensq_backend_monitor")
+                cmd_vel_publisher = node.create_publisher(Twist, CMD_VEL_TOPIC, 10)
+                with self._lock:
+                    self._cmd_vel_publisher = cmd_vel_publisher
+                    self._twist_type = Twist
+                    self._ros_available = True
+                    self._status_message = f"Publishing {CMD_VEL_TOPIC}"
 
-            snapshot = robot_state.update_device("Web teleop", "online", f"Publishing {CMD_VEL_TOPIC}", CMD_VEL_TOPIC)
-            self._publish(snapshot)
+                snapshot = robot_state.update_device("Web teleop", "online", f"Publishing {CMD_VEL_TOPIC}", CMD_VEL_TOPIC)
+                self._publish(snapshot)
+            except Exception as exc:
+                message = f"ROS monitor failed to start: {exc}"
+                with self._lock:
+                    self._ros_available = False
+                    self._status_message = message
+                snapshot = robot_state.update_device("Web teleop", "offline", message, CMD_VEL_TOPIC)
+                self._publish(snapshot)
+                return
 
             try:
                 from my_robot_interfaces.msg import HardwareStatus
@@ -129,19 +145,20 @@ class RosMonitor:
         self._thread = Thread(target=run, daemon=True)
         self._thread.start()
 
-    def publish_cmd_vel(self, linear_x: float, angular_z: float) -> bool:
+    def publish_cmd_vel(self, linear_x: float, angular_z: float) -> tuple[bool, str]:
         with self._lock:
             publisher = self._cmd_vel_publisher
             twist_type = self._twist_type
+            status_message = self._status_message
 
         if not self._ros_available or publisher is None or twist_type is None:
-            return False
+            return False, status_message
 
         twist = twist_type()
         twist.linear.x = max(-0.5, min(0.5, float(linear_x)))
         twist.angular.z = max(-1.5, min(1.5, float(angular_z)))
         publisher.publish(twist)
-        return True
+        return True, f"Published {CMD_VEL_TOPIC}"
 
 
 def create_monitor(loop: asyncio.AbstractEventLoop) -> RosMonitor:

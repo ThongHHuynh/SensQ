@@ -77,10 +77,10 @@ async def teleop_cmd_vel(command: CmdVelRequest) -> dict:
     if ros_monitor is None:
         return {"ok": False, "message": "ROS monitor is not initialized"}
 
-    published = ros_monitor.publish_cmd_vel(command.linear_x, command.angular_z)
+    published, message = ros_monitor.publish_cmd_vel(command.linear_x, command.angular_z)
     return {
         "ok": published,
-        "message": "Published /cmd_vel" if published else "ROS publisher is not available",
+        "message": message,
         "linear_x": command.linear_x,
         "angular_z": command.angular_z,
     }

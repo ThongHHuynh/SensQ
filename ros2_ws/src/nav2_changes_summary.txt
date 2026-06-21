@@ -1,0 +1,217 @@
+Nav2 launch fixes summary
+=========================
+
+Goal
+----
+Launch the robot in Gazebo with the map, RViz, and the Nav2 stack without the
+missing map/odom TF error.
+
+Problem observed
+----------------
+Nav2 reported that it could not transform from base_link to map, and TF showed
+that the map frame did not exist. Since navigation.launch.py starts Nav2 with
+slam=False, Nav2 expects AMCL to localize the robot and publish the map -> odom
+transform. AMCL was not publishing that transform during startup.
+
+Changes made
+------------
+1. Added a package-local Nav2 parameter file:
+   my_robot_bringup/config/nav2_params.yaml
+
+   This file was copied from the Humble nav2_bringup default params so the robot
+   launch no longer depends on implicit stock parameters.
+
+2. Updated AMCL parameters in nav2_params.yaml:
+   - scan_topic: scan
+   - map_topic: map
+   - set_initial_pose: true
+   - always_reset_initial_pose: false
+   - first_map_only: false
+   - initial_pose:
+       x: 0.0
+       y: 0.0
+       z: 0.0
+       yaw: 0.0
+
+   These settings allow AMCL to initialize at the robot's Gazebo spawn pose and
+   publish map -> odom without requiring a manual initial pose from RViz.
+
+3. Updated my_robot_bringup/launch/navigation.launch.py:
+   - Imported TimerAction.
+   - Added nav2_params_path pointing to my_robot_bringup/config/nav2_params.yaml.
+   - Passed params_file:=nav2_params_path into nav2_bringup/bringup_launch.py.
+   - Passed autostart:=true into Nav2.
+   - Passed use_composition:=False so AMCL, map_server, and other Nav2 nodes run
+     as separate processes with clearer logs.
+   - Wrapped Nav2 startup in a 5 second TimerAction so Gazebo, the robot spawn,
+     ros_gz_bridge, /clock, /scan, /odom, and robot TF can start before AMCL and
+     the costmaps activate.
+
+4. Updated my_robot_bringup/package.xml:
+   - Added xacro as an exec_depend.
+   - Added nav2_bringup as an exec_depend.
+
+   These dependencies are used directly by navigation.launch.py and should be
+   declared for reliable package installation and launch behavior.
+
+Verification done
+-----------------
+The launch file was checked with:
+  python3 -m py_compile my_robot_bringup/launch/navigation.launch.py
+
+The Nav2 YAML file was checked with:
+  python3 -c "import yaml; yaml.safe_load(open('my_robot_bringup/config/nav2_params.yaml'))"
+
+Result
+------
+After rebuilding and sourcing the workspace, the Nav2 stack launched correctly
+and the missing map/odom TF issue was resolved.
+
+
+Update on 2026-05-18
+====================
+
+Goal
+----
+Reduce ambiguity between the two navigation packages, align Nav2 with the
+robot's actual TF tree, and document why the repeated "base_link to map"
+timeout was still appearing.
+
+Problem observed
+----------------
+The runtime error still reported:
+
+  Timed out waiting for transform from base_link to map to become available
+
+That message did not match the newer my_robot_bringup Nav2 config anymore. The
+workspace contains two Nav2 launch/config paths:
+
+- my_robot_bringup/launch/navigation.launch.py
+- my_robot_navigation/launch/navigation.launch.py
+
+The second package still used base_link in its Nav2 parameters and still
+launched Nav2 with composed nodes, which matched the user's runtime logs
+showing component_container_isolated.
+
+Key finding
+-----------
+The robot's odometry frame is based on base_footprint, not base_link:
+
+- my_robot_bringup/config/my_robot_controller.yaml
+  - odom_frame_id: odom
+  - base_frame_id: base_footprint
+
+- my_robot_description/urdf/mobile_base.gazebo.xacro
+  - frame_id: odom
+  - child_frame_id: base_footprint
+
+- my_robot_description/urdf/mobile_base.urdf.xacro
+  - fixed joint from base_footprint to base_link
+
+Therefore the intended TF chain for 2D navigation is:
+
+  map -> odom -> base_footprint -> base_link
+
+Nav2 and AMCL should use base_footprint as the robot base frame so their frame
+lookups match the odometry source.
+
+Changes made in my_robot_bringup
+--------------------------------
+1. Updated my_robot_bringup/launch/navigation.launch.py
+   - Fixed the RViz config path from lidar_urdf_config.rviz to urdf_config.rviz.
+   - Renamed the Gazebo world variable for clarity:
+     - world_path points to my_robot_description/worlds/maze.sdf
+     - nav_map_path points to /home/tom/maps/simple_maze.yaml
+   - Kept Nav2 startup delayed by 5 seconds.
+   - Kept use_composition:=False so Nav2 nodes run as separate processes.
+
+2. Updated my_robot_bringup/launch/gazebo.launch.py
+   - Fixed the RViz config path from lidar_urdf_config.rviz to urdf_config.rviz.
+
+3. Updated my_robot_bringup/config/nav2_params.yaml
+   - Confirmed AMCL uses:
+     - base_frame_id: base_footprint
+     - map_topic: map
+     - set_initial_pose: true
+     - initial_pose at the spawn origin
+   - Changed Nav2 robot base frame references from base_link to
+     base_footprint in:
+     - bt_navigator
+     - local_costmap
+     - global_costmap
+     - behavior_server
+
+Changes made in my_robot_navigation
+-----------------------------------
+1. Updated my_robot_navigation/config/nav2_config.yaml
+   - Changed AMCL base_frame_id from base_link to base_footprint.
+   - Added:
+     - map_topic: map
+     - set_initial_pose: true
+     - always_reset_initial_pose: false
+     - first_map_only: false
+     - initial_pose at the origin
+   - Changed Nav2 robot base frame references from base_link to
+     base_footprint in:
+     - bt_navigator
+     - local_costmap
+     - global_costmap
+     - recoveries_server
+
+2. Updated my_robot_navigation/launch/navigation.launch.py
+   - Fixed the RViz config path from lidar_urdf_config.rviz to urdf_config.rviz.
+   - Split the Gazebo world path from the Nav2 map path for clarity.
+   - Added use_composition:=False.
+   - Added a 5 second TimerAction delay before Nav2 startup.
+
+Behavioral clarification
+------------------------
+AMCL does not create a 2D map. It localizes the robot on an existing map that
+is published by map_server. In this workspace:
+
+- SLAM / map creation path:
+  - my_robot_bringup/launch/my_robot.launch.py
+  - uses slam_toolbox
+
+- Localization / saved map path:
+  - my_robot_bringup/launch/navigation.launch.py
+  - my_robot_navigation/launch/navigation.launch.py
+  - use Nav2 with slam=False, map_server, and AMCL
+
+Why base_footprint is used
+--------------------------
+base_footprint still moves with the robot. It is not fixed in the world. It is
+the robot's 2D ground-projected base frame, which is more appropriate for Nav2
+than base_link because:
+
+- it matches the odometry child frame already published by the robot
+- it represents planar x/y/yaw motion used by 2D localization and costmaps
+- base_link remains available through the fixed transform
+  base_footprint -> base_link
+
+Verification done
+-----------------
+The following checks passed after the edits:
+
+- python3 -m py_compile my_robot_bringup/launch/navigation.launch.py
+- python3 -m py_compile my_robot_bringup/launch/gazebo.launch.py
+- python3 -c "import yaml; yaml.safe_load(open('my_robot_bringup/config/nav2_params.yaml'))"
+- python3 -m py_compile my_robot_navigation/launch/navigation.launch.py
+- python3 -c "import yaml; yaml.safe_load(open('my_robot_navigation/config/nav2_config.yaml'))"
+
+Recommended runtime verification
+--------------------------------
+After rebuilding and sourcing the workspace, confirm which navigation package
+is actually running and verify the active parameters:
+
+- ros2 param get /amcl base_frame_id
+- ros2 param get /global_costmap/global_costmap robot_base_frame
+- ros2 topic echo /map --once
+
+Expected values:
+
+- /amcl base_frame_id -> base_footprint
+- /global_costmap/global_costmap robot_base_frame -> base_footprint
+- /map should be published by map_server
+
+

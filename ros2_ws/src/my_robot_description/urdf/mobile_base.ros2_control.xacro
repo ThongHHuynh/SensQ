@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- Arg controlled by launch -->
+    <xacro:macro name="mobile_base_ros2_control" params="use_mock_hardware serial_port baud">
+        <xacro:property name="mock" value="${str(use_mock_hardware)}"/>
+        <ros2_control name = "MobileBaseHardwareInterface" type="system">
+            <!-- REAL HARDWARE -->
+            <xacro:unless value="${mock}">
+            <hardware>
+                <plugin>mobile_base_hardware/MobileBaseHardwareInterface</plugin>
+                <param name="port">${serial_port}</param>
+                <param name="baud">${baud}</param>
+                <param name="timeout_ms">20</param>
+                <param name="counts_per_rev">1980</param>
+                <!-- <param name="invert_left">true</param>
+                <param name="invert_right">true</param> -->
+                <param name="invert_left_cmd">false</param>
+                <param name="invert_right_cmd">false</param>
+                <param name="invert_left_enc">false</param>
+                <param name="invert_right_enc">false</param>
+                <param name="max_rad_s">40.0</param>
+            </hardware>
+            </xacro:unless>
+
+            <!-- MOCK HARDWARE -->
+            <xacro:if value="${mock}">
+            <hardware>
+                <!-- Most common mock plugin in ros2_control -->
+                <plugin>mock_components/GenericSystem</plugin>
+                <param name="calculate_dynamics">true</param>
+            </hardware>
+            </xacro:if>
+
+            <!--SAMR FOR BOTH-->
+            <joint name="base_right_wheel_joint">
+                <!-- how you will control the joint -->
+                <command_interface name="velocity"/>
+                <!--hardware will return current position-->
+                <state_interface name="position" />
+                <!--hardware return velocity-->
+                <state_interface name="velocity" />
+            </joint>
+            <joint name="base_left_wheel_joint">
+                <command_interface name="velocity"/>
+                <state_interface name="position" />
+                <state_interface name="velocity" />
+            </joint>
+
+        </ros2_control>
+    </xacro:macro>
+</robot>

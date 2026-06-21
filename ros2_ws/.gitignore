@@ -1,0 +1,40 @@
+# colcon / ROS2 build artifacts
+build/
+install/
+log/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CMake / compile
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# ROS / testing
+*.bag
+*.bag.active
+*.bag.lock
+*.bag.db3
+*.bag.db3-wal
+*.bag.db3-shm
+*.coverage
+lcov.info
+Testing/
+.vscode/

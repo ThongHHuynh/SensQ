@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ROS 2 Robot Control</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <p class="eyebrow">ROS 2 Dashboard</p>
+        <h1>Robot Launch Control</h1>
+        <p class="hero-copy">
+          Start your current bringup targets from one browser-based control panel.
+        </p>
+      </section>
+
+      <section class="panel control-panel">
+        <div class="panel-header">
+          <h2>Launch Selector</h2>
+          <span id="statusBadge" class="status-badge idle">Idle</span>
+        </div>
+
+        <label for="launchSelect">Pick what to launch</label>
+        <select id="launchSelect"></select>
+        <p id="launchDescription" class="launch-description"></p>
+
+        <div class="actions">
+          <button id="startButton" class="primary">Start Launch</button>
+          <button id="stopButton" class="secondary">Stop Launch</button>
+        </div>
+
+        <dl class="status-grid">
+          <div>
+            <dt>Current</dt>
+            <dd id="currentLaunch">None</dd>
+          </div>
+          <div>
+            <dt>Uptime</dt>
+            <dd id="uptime">-</dd>
+          </div>
+          <div>
+            <dt>Exit Code</dt>
+            <dd id="returnCode">-</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel-header">
+          <h2>Launch Output</h2>
+          <button id="refreshButton" class="ghost">Refresh</button>
+        </div>
+        <pre id="logOutput">Waiting for status...</pre>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

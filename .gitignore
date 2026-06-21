@@ -1,0 +1,23 @@
+# ROS 2 generated build files
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# Local machine settings / secrets
+config_local/
+.env
+*.local.yaml
+*.local.json
+
+# Generated robot data
+maps/
+bags/
+recordings/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editor
+.vscode/
+.idea/

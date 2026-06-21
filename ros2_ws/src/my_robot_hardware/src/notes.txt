@@ -1,0 +1,10 @@
+// SERIAL_PORT.CPP
+O_RDWR: Open for Read AND Write
+O_NOCTTY: Do NOT make this device the controlling terminal.
+O_NONBLOCK: Open in non-blocking mode.
+
+fd_ = door handle
+read/write = using the door
+termios tty{}; : configuration for the door
+
+TCSANOW: apply now

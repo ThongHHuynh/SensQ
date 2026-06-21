@@ -2,8 +2,9 @@ import os
 
 from ament_index_python.packages import get_package_share_directory, get_package_share_path
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, TimerAction
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, RegisterEventHandler, TimerAction
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.actions import Node, SetRemap
@@ -78,8 +79,6 @@ def generate_launch_description():
             "/controller_manager",
             "--controller-manager-timeout",
             "60",
-            "--param-file",
-            controller_path,
         ],
         output="screen",
     )
@@ -93,18 +92,20 @@ def generate_launch_description():
             "/controller_manager",
             "--controller-manager-timeout",
             "60",
-            "--param-file",
-            controller_path,
         ],
         output="screen",
     )
 
-    delayed_controllers = TimerAction(
-        period=2.0,
-        actions=[
-            joint_state_broadcaster,
-            diff_drive,
-        ],
+    delayed_joint_state_broadcaster = TimerAction(
+        period=4.0,
+        actions=[joint_state_broadcaster],
+    )
+
+    start_diff_drive_after_joint_state_broadcaster = RegisterEventHandler(
+        OnProcessExit(
+            target_action=joint_state_broadcaster,
+            on_exit=[diff_drive],
+        )
     )
 
     lidar_launch = IncludeLaunchDescription(
@@ -181,7 +182,8 @@ def generate_launch_description():
             ),
             robot_state_publisher_node,
             controller_node,
-            delayed_controllers,
+            delayed_joint_state_broadcaster,
+            start_diff_drive_after_joint_state_broadcaster,
             lidar_launch,
             delayed_nav2,
             rviz2_node,

@@ -156,6 +156,7 @@ Fix one of these:
      source .venv/bin/activate
      pip install --upgrade pip setuptools wheel
      pip install --force-reinstall --no-cache-dir asyncpg
+     pip install --force-reinstall --no-cache-dir greenlet pydantic-core
      pip install -r requirements.txt
 
   3. Or run with your real database URL:

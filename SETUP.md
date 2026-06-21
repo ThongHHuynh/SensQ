@@ -236,29 +236,43 @@ source .venv/bin/activate
 python3 -m py_compile app/*.py
 ```
 
-If the backend reports this Jetson error:
+If the backend reports one of these Jetson errors:
 
 ```text
 ModuleNotFoundError: No module named 'asyncpg.protocol.protocol'
+ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'
+ValueError: the greenlet library is required to use this function. No module named 'greenlet._greenlet'
 ```
 
-the compiled `asyncpg` extension is missing or corrupted inside the virtualenv. Repair it with:
+then a compiled Python dependency is missing or corrupted inside the virtualenv. Repair it with:
 
 ```bash
 cd /home/tom/SensQ/backend
 source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
-pip install --force-reinstall --no-cache-dir asyncpg
+pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic
 pip install -r requirements.txt
 ```
 
-If the reinstall builds from source and fails, install build tools and retry:
+If reinstalling keeps failing, recreate the virtualenv:
 
 ```bash
-sudo apt install -y build-essential python3-dev
+cd /home/tom/SensQ/backend
+deactivate 2>/dev/null || true
+rm -rf .venv
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+```
+
+If packages build from source and fail, install build tools and retry:
+
+```bash
+sudo apt install -y build-essential python3-dev rustc cargo
 cd /home/tom/SensQ/backend
 source .venv/bin/activate
-pip install --force-reinstall --no-cache-dir asyncpg
+pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic
 ```
 
 Check frontend:

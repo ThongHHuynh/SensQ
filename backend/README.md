@@ -55,19 +55,21 @@ ALTER DATABASE sensq OWNER TO sensq;
 
 Run those SQL commands only inside the `postgres=#` prompt. After `\q`, SQL typed in the terminal will be interpreted by Bash and fail.
 
-If startup reports:
+If startup reports one of these compiled dependency errors:
 
 ```text
 ModuleNotFoundError: No module named 'asyncpg.protocol.protocol'
+ModuleNotFoundError: No module named 'pydantic_core._pydantic_core'
+ValueError: the greenlet library is required to use this function. No module named 'greenlet._greenlet'
 ```
 
-then the Jetson backend virtualenv has a broken `asyncpg` install. Repair it:
+then the Jetson backend virtualenv has a broken compiled package install. Repair it:
 
 ```bash
 cd /home/tom/SensQ/backend
 source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
-pip install --force-reinstall --no-cache-dir asyncpg
+pip install --force-reinstall --no-cache-dir asyncpg greenlet pydantic-core pydantic
 pip install -r requirements.txt
 ```
 

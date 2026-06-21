@@ -7,6 +7,7 @@ import {
   Crosshair,
   Disc3,
   Gamepad2,
+  Keyboard,
   LocateFixed,
   Play,
   Pencil,
@@ -36,6 +37,7 @@ function MapsPage({ robot }) {
   const [teleopReady, setTeleopReady] = useState(false);
   const [teleopStatus, setTeleopStatus] = useState("idle");
   const [teleopMessage, setTeleopMessage] = useState("Start teleop before sending web drive commands.");
+  const [teleopMode, setTeleopMode] = useState("keyboard");
 
   async function handleStartTeleop() {
     setTeleopStatus("starting");
@@ -340,17 +342,31 @@ function MapsPage({ robot }) {
               </button>
             </div>
 
-            <div className="mt-4 grid w-[156px] grid-cols-3 gap-2 justify-self-start">
-              <div />
-              <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(linearSpeed, 0)} />
-              <div />
-              <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, angularSpeed)} />
-              <TeleopButton disabled={!teleopReady} label="Stop" icon={CircleStop} onClick={() => handleDrive(0, 0)} tone="stop" />
-              <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -angularSpeed)} />
-              <div />
-              <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-linearSpeed, 0)} />
-              <div />
+            <div className="mt-4 inline-flex rounded-md border border-console-line bg-console-panel p-1">
+              <ModeButton active={teleopMode === "keyboard"} icon={Keyboard} label="Keyboard" onClick={() => setTeleopMode("keyboard")} />
+              <ModeButton active={teleopMode === "joystick"} icon={Gamepad2} label="Joystick" onClick={() => setTeleopMode("joystick")} />
             </div>
+
+            {teleopMode === "keyboard" ? (
+              <div className="mt-4 grid w-[156px] grid-cols-3 gap-2 justify-self-start">
+                <div />
+                <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(linearSpeed, 0)} />
+                <div />
+                <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, angularSpeed)} />
+                <TeleopButton disabled={!teleopReady} label="Stop" icon={CircleStop} onClick={() => handleDrive(0, 0)} tone="stop" />
+                <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -angularSpeed)} />
+                <div />
+                <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-linearSpeed, 0)} />
+                <div />
+              </div>
+            ) : (
+              <JoystickControl
+                disabled={!teleopReady}
+                linearSpeed={linearSpeed}
+                angularSpeed={angularSpeed}
+                onCommand={handleDrive}
+              />
+            )}
 
             <div className="mt-4 space-y-4 rounded-md border border-console-line bg-console-panel p-3 text-sm text-slate-600">
               <SpeedControl
@@ -451,7 +467,7 @@ function LiveMapCanvas({ liveMap, pose }) {
       if (canvasX >= 0 && canvasX <= canvas.width && canvasY >= 0 && canvasY <= canvas.height) {
         ctx.save();
         ctx.translate(canvasX, canvasY);
-        ctx.rotate(-DEG_TO_RAD * yaw);
+        ctx.rotate(-DEG_TO_RAD * yaw + Math.PI / 2);
         ctx.fillStyle = "#2563eb";
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = Math.max(2, scale * 0.55);
@@ -511,6 +527,127 @@ function TeleopStatusLight({ status }) {
       <span className={`h-2.5 w-2.5 rounded-full ${styles[status] ?? styles.idle}`} aria-hidden="true" />
       {labels[status] ?? labels.idle}
     </span>
+  );
+}
+
+function ModeButton({ active, icon: Icon, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-8 items-center gap-2 rounded px-2 text-xs font-semibold transition ${
+        active ? "bg-white text-console-ink shadow-sm" : "text-slate-500 hover:text-console-ink"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
+function JoystickControl({ disabled, linearSpeed, angularSpeed, onCommand }) {
+  const padRef = useRef(null);
+  const commandRef = useRef({ linear_x: 0, angular_z: 0 });
+  const onCommandRef = useRef(onCommand);
+  const [isActive, setIsActive] = useState(false);
+  const [stick, setStick] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    onCommandRef.current = onCommand;
+  }, [onCommand]);
+
+  function updateStick(event) {
+    const pad = padRef.current;
+    if (!pad || disabled) return;
+
+    const rect = pad.getBoundingClientRect();
+    const radius = rect.width / 2;
+    const centerX = rect.left + radius;
+    const centerY = rect.top + radius;
+    const rawX = event.clientX - centerX;
+    const rawY = event.clientY - centerY;
+    const distance = Math.hypot(rawX, rawY);
+    const limit = radius - 24;
+    const clamp = distance > limit ? limit / distance : 1;
+    const x = rawX * clamp;
+    const y = rawY * clamp;
+    const normalizedX = x / limit;
+    const normalizedY = y / limit;
+
+    setStick({ x, y });
+    commandRef.current = {
+      linear_x: Number((-normalizedY * linearSpeed).toFixed(3)),
+      angular_z: Number((-normalizedX * angularSpeed).toFixed(3))
+    };
+  }
+
+  function stopStick() {
+    setIsActive(false);
+    setStick({ x: 0, y: 0 });
+    commandRef.current = { linear_x: 0, angular_z: 0 };
+    if (!disabled) onCommandRef.current(0, 0);
+  }
+
+  useEffect(() => {
+    if (!isActive || disabled) return undefined;
+
+    const timer = window.setInterval(() => {
+      onCommandRef.current(commandRef.current.linear_x, commandRef.current.angular_z);
+    }, 120);
+
+    return () => window.clearInterval(timer);
+  }, [disabled, isActive]);
+
+  useEffect(() => {
+    return () => {
+      onCommandRef.current(0, 0);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      setIsActive(false);
+      setStick({ x: 0, y: 0 });
+      commandRef.current = { linear_x: 0, angular_z: 0 };
+    }
+  }, [disabled]);
+
+  return (
+    <div className="mt-4">
+      <div
+        ref={padRef}
+        role="application"
+        aria-label="Joystick teleoperation"
+        className={`relative h-44 w-44 touch-none rounded-full border border-console-line bg-console-panel ${
+          disabled ? "cursor-not-allowed opacity-45" : "cursor-grab active:cursor-grabbing"
+        }`}
+        onPointerDown={(event) => {
+          if (disabled) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setIsActive(true);
+          updateStick(event);
+        }}
+        onPointerMove={(event) => {
+          if (isActive) updateStick(event);
+        }}
+        onPointerUp={stopStick}
+        onPointerCancel={stopStick}
+        onLostPointerCapture={stopStick}
+      >
+        <div className="absolute left-1/2 top-3 h-[calc(100%-1.5rem)] w-px -translate-x-1/2 bg-slate-300" aria-hidden="true" />
+        <div className="absolute left-3 top-1/2 h-px w-[calc(100%-1.5rem)] -translate-y-1/2 bg-slate-300" aria-hidden="true" />
+        <div
+          className="absolute left-1/2 top-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-signal-info bg-white text-signal-info shadow-soft"
+          style={{ transform: `translate(calc(-50% + ${stick.x}px), calc(-50% + ${stick.y}px))` }}
+        >
+          <Gamepad2 className="h-5 w-5" aria-hidden="true" />
+        </div>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-xs text-slate-500">
+        <div>vx {commandRef.current.linear_x.toFixed(2)}</div>
+        <div>wz {commandRef.current.angular_z.toFixed(2)}</div>
+      </div>
+    </div>
   );
 }
 

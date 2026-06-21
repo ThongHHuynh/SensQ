@@ -18,6 +18,58 @@ class LaunchManager:
     def is_running(self) -> bool:
         return self._process is not None and self._process.returncode is None
 
+    async def _find_existing_launch_pids(self) -> list[int]:
+        process = await asyncio.create_subprocess_exec(
+            "pgrep",
+            "-f",
+            "ros2 launch my_robot_bringup my_robot.launch.py",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        if process.returncode not in (0, 1):
+            return []
+
+        current_pid = os.getpid()
+        pids = []
+        for line in stdout.decode().splitlines():
+            try:
+                pid = int(line.strip())
+            except ValueError:
+                continue
+            if pid != current_pid:
+                pids.append(pid)
+        return pids
+
+    async def _signal_process_group(self, pid: int, sig: signal.Signals) -> None:
+        try:
+            pgid = os.getpgid(pid)
+        except ProcessLookupError:
+            return
+
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return
+
+    async def _stop_external_launches(self) -> int:
+        stopped = 0
+        pids = await self._find_existing_launch_pids()
+        if not pids:
+            return stopped
+
+        for sig, delay in ((signal.SIGINT, 4), (signal.SIGTERM, 2), (signal.SIGKILL, 0)):
+            remaining = await self._find_existing_launch_pids()
+            if not remaining:
+                break
+            for pid in remaining:
+                await self._signal_process_group(pid, sig)
+                stopped += 1
+            if delay:
+                await asyncio.sleep(delay)
+
+        return stopped
+
     async def start_mobile_base(self) -> dict:
         if self.is_running:
             return robot_state.get_snapshot()
@@ -58,6 +110,7 @@ class LaunchManager:
         return robot_state.get_snapshot()
 
     async def stop(self) -> dict:
+        stopped_external = 0
         if self._process and self._process.returncode is None:
             try:
                 os.killpg(self._process.pid, signal.SIGINT)
@@ -78,6 +131,8 @@ class LaunchManager:
                     except ProcessLookupError:
                         pass
                 await self._process.wait()
+        else:
+            stopped_external = await self._stop_external_launches()
 
         if self._log_task:
             self._log_task.cancel()
@@ -88,7 +143,10 @@ class LaunchManager:
         robot_state.update_device("Lidar", "offline", "Launch stopped")
         robot_state.update_device("SLAM", "offline", "Launch stopped")
         robot_state.update_device("ros2_control", "offline", "Launch stopped")
-        await save_event("launch", "Stopped my_robot.launch.py")
+        if stopped_external:
+            await save_event("launch", f"Stopped {stopped_external} externally started launch process signal targets")
+        else:
+            await save_event("launch", "Stopped my_robot.launch.py")
         await ws_manager.broadcast(snapshot)
         return robot_state.get_snapshot()
 

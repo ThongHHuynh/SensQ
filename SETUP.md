@@ -362,3 +362,19 @@ cd /home/tom/SensQ/ui
 npm run lint
 npm run build
 ```
+
+## Stopping An Existing ROS Launch
+
+The UI Stop button can stop a launch started by the backend. It also checks for an already-running command:
+
+```bash
+ros2 launch my_robot_bringup my_robot.launch.py
+```
+
+and signals that process group. This lets the website stop lidar, SLAM, ros2_control, and related child nodes even if the launch was started before the website.
+
+If a manually started launch still remains, inspect it:
+
+```bash
+pgrep -af "ros2 launch my_robot_bringup my_robot.launch.py"
+```

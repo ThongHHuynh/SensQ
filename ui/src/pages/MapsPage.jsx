@@ -146,84 +146,23 @@ function MapsPage({ robot }) {
         }
       />
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <div className="relative min-h-[72vh] overflow-hidden rounded-md border border-console-line bg-white">
-          <LiveMapCanvas liveMap={liveMap} />
-          <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
-            Active map: {navigation.activeMap ?? "Waiting"}
-          </div>
-          <div className="absolute right-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
-            <div className="font-semibold text-console-ink">Robot pose</div>
-            <div className="mt-1 font-mono text-xs text-slate-600">
-              {pose.frame ?? "odom"} x {pose.x ?? 0}, y {pose.y ?? 0}, yaw {pose.yaw ?? 0} deg
+      <section className="grid gap-4 xl:grid-cols-[1fr_280px]">
+        <div className="space-y-4">
+          <div className="relative min-h-[72vh] overflow-hidden rounded-md border border-console-line bg-white">
+            <LiveMapCanvas liveMap={liveMap} />
+            <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
+              Active map: {navigation.activeMap ?? "Waiting"}
+            </div>
+            <div className="absolute right-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
+              <div className="font-semibold text-console-ink">Robot pose</div>
+              <div className="mt-1 font-mono text-xs text-slate-600">
+                {pose.frame ?? "odom"} x {pose.x ?? 0}, y {pose.y ?? 0}, yaw {pose.yaw ?? 0} deg
+              </div>
             </div>
           </div>
-        </div>
 
-        <aside className="rounded-md border border-console-line bg-white p-5">
-          <h2 className="text-lg font-semibold tracking-normal">Available maps</h2>
-          <p className="mt-1 text-sm text-slate-500">{mapMessage}</p>
-          <div className="mt-4 space-y-3">
-            {maps.map((map) => {
-              const isActive = map.name === navigation.activeMap;
-              const isSaved = String(map.id || "").startsWith("saved-");
-              const isEditing = editingMapId === map.id;
-
-              return (
-                <div
-                  key={map.id || map.name}
-                  className={`rounded-md border p-3 transition ${
-                    isActive ? "border-emerald-400 bg-emerald-50" : "border-console-line bg-console-panel"
-                  }`}
-                >
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <input
-                        className="h-9 min-w-0 flex-1 rounded-md border border-console-line px-2 text-sm"
-                        value={editingMapName}
-                        onChange={(event) => setEditingMapName(event.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRenameMap(map)}
-                        className="h-9 rounded-md bg-console-rail px-2 text-xs font-semibold text-white"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-start justify-between gap-2">
-                      <button type="button" onClick={() => handleSelectMap(map)} className="min-w-0 flex-1 text-left">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate font-medium text-console-ink">{map.name || "Unnamed map"}</span>
-                          {isActive ? <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" aria-label="Active map" /> : null}
-                        </div>
-                        <div className="mt-1 text-sm text-slate-500">{map.resolution || "Resolution unknown"}</div>
-                        <div className="mt-2 truncate text-xs font-medium text-slate-500">{map.updated || "Not synced"}</div>
-                      </button>
-                      {isSaved ? (
-                        <button
-                          type="button"
-                          onClick={() => handleStartRename(map)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-console-line bg-white text-slate-600"
-                          aria-label={`Rename ${map.name}`}
-                          title="Rename map"
-                        >
-                          <Pencil className="h-4 w-4" aria-hidden="true" />
-                        </button>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {maps.length === 0 ? <div className="text-sm text-slate-500">Waiting for map metadata.</div> : null}
-          </div>
-        </aside>
-      </section>
-
-      <section className="mt-4 grid gap-4 xl:grid-cols-2">
-        <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -272,9 +211,9 @@ function MapsPage({ robot }) {
               Save Map
             </button>
           </div>
-        </div>
+            </div>
 
-        <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
+            <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -309,55 +248,110 @@ function MapsPage({ robot }) {
             <Send className="h-4 w-4" aria-hidden="true" />
             Send Goal
           </button>
+            </div>
+          </div>
         </div>
-      </section>
 
-      <section className="mt-4 rounded-md border border-console-line bg-white p-5 shadow-soft">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+        <aside className="space-y-4">
+          <div className="rounded-md border border-console-line bg-white p-4">
+            <h2 className="text-base font-semibold tracking-normal">Available maps</h2>
+            <p className="mt-1 text-xs text-slate-500">{mapMessage}</p>
+            <div className="mt-3 max-h-[34vh] space-y-2 overflow-y-auto pr-1">
+              {maps.map((map) => {
+                const isActive = map.name === navigation.activeMap;
+                const isSaved = String(map.id || "").startsWith("saved-");
+                const isEditing = editingMapId === map.id;
+
+                return (
+                  <div
+                    key={map.id || map.name}
+                    className={`rounded-md border p-2 transition ${
+                      isActive ? "border-emerald-400 bg-emerald-50" : "border-console-line bg-console-panel"
+                    }`}
+                  >
+                    {isEditing ? (
+                      <div className="flex gap-2">
+                        <input
+                          className="h-8 min-w-0 flex-1 rounded-md border border-console-line px-2 text-xs"
+                          value={editingMapName}
+                          onChange={(event) => setEditingMapName(event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRenameMap(map)}
+                          className="h-8 rounded-md bg-console-rail px-2 text-xs font-semibold text-white"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        <button type="button" onClick={() => handleSelectMap(map)} className="min-w-0 flex-1 text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-medium text-console-ink">{map.name || "Unnamed map"}</span>
+                            {isActive ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" aria-label="Active map" /> : null}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">{map.resolution || "Resolution unknown"}</div>
+                        </button>
+                        {isSaved ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStartRename(map)}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-console-line bg-white text-slate-600"
+                            aria-label={`Rename ${map.name}`}
+                            title="Rename map"
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {maps.length === 0 ? <div className="text-sm text-slate-500">Waiting for map metadata.</div> : null}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-console-line bg-white p-4 shadow-soft">
             <div className="flex items-center gap-2">
               <Gamepad2 className="h-5 w-5 text-signal-info" aria-hidden="true" />
-              <h2 className="text-lg font-semibold tracking-normal">Teleoperation</h2>
+              <h2 className="text-base font-semibold tracking-normal">Teleoperation</h2>
               <TeleopStatusLight status={teleopStatus} />
             </div>
-            <p className="mt-1 text-sm text-slate-600">{teleopMessage}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleStartTeleop}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
-            >
-              <Gamepad2 className="h-4 w-4" aria-hidden="true" />
-              Start Teleop
-            </button>
-            <button
-              type="button"
-              onClick={handleStopTeleop}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
-            >
-              <CircleStop className="h-4 w-4" aria-hidden="true" />
-              Stop Teleop
-            </button>
-          </div>
-        </div>
+            <p className="mt-1 text-xs text-slate-600">{teleopMessage}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleStartTeleop}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+              >
+                <Gamepad2 className="h-4 w-4" aria-hidden="true" />
+                Start
+              </button>
+              <button
+                type="button"
+                onClick={handleStopTeleop}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+              >
+                <CircleStop className="h-4 w-4" aria-hidden="true" />
+                Stop
+              </button>
+            </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[220px_1fr]">
-          <div className="grid w-[180px] grid-cols-3 gap-2 justify-self-center lg:justify-self-start">
-            <div />
-            <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(linearSpeed, 0)} />
-            <div />
-            <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, angularSpeed)} />
-            <TeleopButton disabled={!teleopReady} label="Stop" icon={CircleStop} onClick={() => handleDrive(0, 0)} tone="stop" />
-            <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -angularSpeed)} />
-            <div />
-            <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-linearSpeed, 0)} />
-            <div />
-          </div>
+            <div className="mt-4 grid w-[156px] grid-cols-3 gap-2 justify-self-start">
+              <div />
+              <TeleopButton disabled={!teleopReady} label="Forward" icon={ArrowUp} onClick={() => handleDrive(linearSpeed, 0)} />
+              <div />
+              <TeleopButton disabled={!teleopReady} label="Left" icon={ArrowLeft} onClick={() => handleDrive(0, angularSpeed)} />
+              <TeleopButton disabled={!teleopReady} label="Stop" icon={CircleStop} onClick={() => handleDrive(0, 0)} tone="stop" />
+              <TeleopButton disabled={!teleopReady} label="Right" icon={ArrowRight} onClick={() => handleDrive(0, -angularSpeed)} />
+              <div />
+              <TeleopButton disabled={!teleopReady} label="Reverse" icon={ArrowDown} onClick={() => handleDrive(-linearSpeed, 0)} />
+              <div />
+            </div>
 
-          <div className="rounded-md border border-console-line bg-console-panel p-4 text-sm text-slate-600">
-            <div className="font-semibold text-console-ink">Speed</div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="mt-4 space-y-4 rounded-md border border-console-line bg-console-panel p-3 text-sm text-slate-600">
               <SpeedControl
                 label="Linear"
                 value={linearSpeed}
@@ -377,11 +371,8 @@ function MapsPage({ robot }) {
                 onChange={setAngularSpeed}
               />
             </div>
-            <div className="mt-4 font-semibold text-console-ink">Command mapping</div>
-            <div className="mt-2 font-mono">ros2 run teleop_twist_keyboard teleop_twist_keyboard</div>
-            <div className="mt-3">Buttons publish bounded `geometry_msgs/Twist` commands to `/cmd_vel` through FastAPI.</div>
           </div>
-        </div>
+        </aside>
       </section>
     </>
   );

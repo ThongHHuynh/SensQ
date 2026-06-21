@@ -63,6 +63,42 @@ require_command npm
 require_command node
 require_command python3
 
+require_free_port() {
+  local port="$1"
+  local label="$2"
+
+  if ! python3 - "$port" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+port = int(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    sock.bind(("0.0.0.0", port))
+finally:
+    sock.close()
+PY
+  then
+    cat >&2 <<EOF
+$label port $port is already in use.
+
+Find the process:
+
+  sudo ss -ltnp | grep ':$port'
+
+Stop it:
+
+  sudo fuser -k ${port}/tcp
+
+Or run SensQ on another port:
+
+  BACKEND_PORT=8001 FRONTEND_PORT=5201 ./scripts/dev.sh
+
+EOF
+    exit 1
+  fi
+}
+
 NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 if (( NODE_MAJOR < 18 )); then
   cat >&2 <<EOF
@@ -166,6 +202,9 @@ Fix one of these:
 EOF
   exit 1
 fi
+
+require_free_port "$BACKEND_PORT" "Backend"
+require_free_port "$FRONTEND_PORT" "Frontend"
 
 log "Backend: http://$PUBLIC_HOST:$BACKEND_PORT"
 log "Frontend: http://$PUBLIC_HOST:$FRONTEND_PORT"

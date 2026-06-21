@@ -141,6 +141,26 @@ Open:
 http://127.0.0.1:5200/
 ```
 
+If the UI runs on a Jetson and you open it from another computer, use the Jetson IP address:
+
+```bash
+hostname -I
+```
+
+Then start with:
+
+```bash
+ROS_DISTRO=humble PUBLIC_HOST=<JETSON_IP> ./scripts/dev.sh
+```
+
+Open:
+
+```text
+http://<JETSON_IP>:5200/
+```
+
+Without `PUBLIC_HOST`, the frontend uses `localhost` for API calls. From another computer, `localhost` points to that computer, not the Jetson, causing browser `NetworkError when attempting to fetch resource`.
+
 The orchestrator starts:
 
 - FastAPI backend on `http://localhost:8000`

@@ -188,7 +188,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "use_rviz",
-                default_value="false",
+                default_value="True",
                 description="Start RViz with the robot description config.",
             ),
             DeclareLaunchArgument(

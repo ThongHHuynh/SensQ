@@ -209,6 +209,7 @@ ros2 launch my_robot_bringup real_nav2_floor.launch.py \
 ```
 
 Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar model.
+This launch runs Nav2 with real time. `/map` comes from `map_server`, and AMCL publishes `map -> odom` after it has the map, `/scan`, odom TF, and an initial pose.
 
 ROS interfaces:
 

@@ -30,6 +30,41 @@ class MappingManager:
     def __init__(self) -> None:
         self._active = False
 
+    async def _call_slam_reset_service(self) -> str | None:
+        workspace = Path(ROS_WORKSPACE)
+        candidates = [
+            "ros2 service call /slam_toolbox/reset std_srvs/srv/Empty {}",
+            "ros2 service call /slam_toolbox/clear std_srvs/srv/Empty {}",
+        ]
+
+        for service_call in candidates:
+            command = (
+                f"source /opt/ros/{ROS_DISTRO}/setup.bash && "
+                f"source {workspace}/install/setup.bash && "
+                f"{service_call}"
+            )
+            process = await asyncio.create_subprocess_exec(
+                "bash",
+                "-lc",
+                command,
+                cwd=str(workspace),
+                env=os.environ.copy(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(process.communicate(), timeout=4)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.communicate()
+                continue
+
+            output = stdout.decode(errors="replace").strip()
+            if process.returncode == 0:
+                return output or service_call
+
+        return None
+
     async def load_saved_maps_into_state(self) -> dict:
         saved_maps = [saved_map_to_payload(saved_map) for saved_map in await list_saved_maps()]
         return robot_state.set_saved_maps(saved_maps)
@@ -47,6 +82,36 @@ class MappingManager:
         await save_event("mapping", "Mapping session stopped")
         await ws_manager.broadcast(snapshot)
         return {"ok": True, "mapping": "idle", "message": "Mapping session stopped"}
+
+    async def reset(self) -> dict:
+        self._active = False
+        slam_output = await self._call_slam_reset_service()
+        snapshot = robot_state.update(
+            {
+                "navigation": {
+                    "mapping": "idle",
+                    "state": "Idle",
+                    "activeMap": "Live SLAM",
+                    "localization": "Waiting",
+                },
+                "liveMap": {
+                    "frame": "map",
+                    "width": 0,
+                    "height": 0,
+                    "resolution": None,
+                    "origin": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+                    "data": [],
+                    "updatedAt": None,
+                    "status": "Map reset",
+                },
+            }
+        )
+        await save_event("mapping", "Map reset requested")
+        await ws_manager.broadcast(snapshot)
+
+        if slam_output:
+            return {"ok": True, "mapping": "idle", "message": "Map reset and SLAM clear requested"}
+        return {"ok": True, "mapping": "idle", "message": "Map display reset; no SLAM reset service responded"}
 
     async def save(self, name: str) -> dict:
         map_name = name.strip()

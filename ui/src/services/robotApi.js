@@ -103,6 +103,18 @@ export async function stopMapping() {
   return response.json();
 }
 
+export async function resetMapping() {
+  const response = await fetch(`${API_BASE_URL}/api/mapping/reset`, {
+    method: "POST"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Mapping reset failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function saveMap(name) {
   const response = await fetch(`${API_BASE_URL}/api/mapping/save`, {
     method: "POST",

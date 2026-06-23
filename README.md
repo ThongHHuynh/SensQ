@@ -219,6 +219,7 @@ ROS interfaces:
 | Camera | Subscribe camera image topic |
 | Mapping | `slam_toolbox` |
 | Save map | SLAM/map save service |
+| Reset map | `POST /api/mapping/reset` clears the live map and asks SLAM to reset |
 | Navigation | Nav2 `NavigateToPose` action |
 | Cancel navigation | Cancel Nav2 action |
 | Controller status | `ros2_control` + diagnostics |

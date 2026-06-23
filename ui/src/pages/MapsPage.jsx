@@ -11,13 +11,14 @@ import {
   LocateFixed,
   Play,
   Pencil,
+  RotateCcw,
   Save,
   Send,
   Square
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader.jsx";
-import { renameMap, saveMap, selectMap, sendTeleopCommand, startMapping, startTeleop, stopMapping, stopTeleop } from "../services/robotApi.js";
+import { renameMap, resetMapping, saveMap, selectMap, sendTeleopCommand, startMapping, startTeleop, stopMapping, stopTeleop } from "../services/robotApi.js";
 
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -91,6 +92,15 @@ function MapsPage({ robot }) {
     try {
       const result = await stopMapping();
       setMappingMessage(result.message || "Mapping stopped");
+    } catch (err) {
+      setMappingMessage(err.message);
+    }
+  }
+
+  async function handleResetMapping() {
+    try {
+      const result = await resetMapping();
+      setMappingMessage(result.message || "Map reset");
     } catch (err) {
       setMappingMessage(err.message);
     }
@@ -191,6 +201,14 @@ function MapsPage({ robot }) {
               >
                 <Square className="h-4 w-4" aria-hidden="true" />
                 Stop
+              </button>
+              <button
+                type="button"
+                onClick={handleResetMapping}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-700"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Reset
               </button>
             </div>
           </div>

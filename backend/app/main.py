@@ -112,6 +112,11 @@ async def stop_mapping() -> dict:
     return await mapping_manager.stop()
 
 
+@app.post("/api/mapping/reset")
+async def reset_mapping() -> dict:
+    return await mapping_manager.reset()
+
+
 @app.post("/api/mapping/save")
 async def save_map(request: SaveMapRequest) -> dict:
     return await mapping_manager.save(request.name)

@@ -139,6 +139,7 @@ Mapping endpoints:
 
 - `POST /api/mapping/start`
 - `POST /api/mapping/stop`
+- `POST /api/mapping/reset`
 - `POST /api/mapping/save`
 - `GET /api/maps`
 

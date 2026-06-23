@@ -31,7 +31,7 @@ def generate_launch_description():
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",
-        "floor.yaml",
+        "my_map.yaml",
     )
 
     robot_description = ParameterValue(
@@ -99,7 +99,7 @@ def generate_launch_description():
     )
 
     delayed_joint_state_broadcaster = TimerAction(
-        period=4.0,
+        period=2.0,
         actions=[joint_state_broadcaster],
     )
 
@@ -132,7 +132,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    nav2_group = GroupAction(
+    nav2_dir = GroupAction(
         actions=[
             SetRemap(src="/odom", dst="/diff_drive_controller/odom"),
             SetRemap(src="odom", dst="/diff_drive_controller/odom"),
@@ -142,7 +142,7 @@ def generate_launch_description():
 
     delayed_nav2 = TimerAction(
         period=2.0,
-        actions=[nav2_group],
+        actions=[nav2_dir],
     )
 
     rviz2_node = Node(

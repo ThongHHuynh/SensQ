@@ -40,7 +40,7 @@ function AppLayout({ tabs, activeTab, onTabChange, children }) {
               <div className="text-xs text-slate-500">Robot Console</div>
             </div>
           </div>
-          <nav className="grid grid-cols-4 gap-2" aria-label="Primary">
+          <nav className="grid grid-cols-5 gap-1" aria-label="Primary">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = tab.id === activeTab;
@@ -50,12 +50,12 @@ function AppLayout({ tabs, activeTab, onTabChange, children }) {
                   key={tab.id}
                   type="button"
                   onClick={() => onTabChange(tab.id)}
-                  className={`flex h-12 flex-col items-center justify-center rounded-md text-[11px] font-medium transition ${
+                  className={`flex h-12 flex-col items-center justify-center rounded-md px-1 text-[10px] font-medium transition ${
                     isActive ? "bg-console-rail text-white" : "bg-console-panel text-slate-600"
                   }`}
                 >
                   <Icon className="mb-1 h-4 w-4" aria-hidden="true" />
-                  <span>{tab.label}</span>
+                  <span className="max-w-full truncate">{tab.label}</span>
                 </button>
               );
             })}

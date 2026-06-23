@@ -66,9 +66,10 @@ Frontend responsibilities:
 - Display dashboard
 - Show device status
 - Show camera stream
+- Show camera dummy frame in Visualization until ROS image topics are wired
 - Show robot mode and errors
 - Send approved user commands to backend
-- Display mapping/navigation state
+- Display mapping/navigation state with pan, zoom, and center controls
 - Keep temporary UI state only
 
 Frontend should store:

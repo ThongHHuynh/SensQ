@@ -9,8 +9,10 @@ import {
   Gamepad2,
   Keyboard,
   LocateFixed,
+  Minus,
   Play,
   Pencil,
+  Plus,
   RotateCcw,
   Save,
   Send,
@@ -39,6 +41,7 @@ function MapsPage({ robot }) {
   const [teleopStatus, setTeleopStatus] = useState("idle");
   const [teleopMessage, setTeleopMessage] = useState("Start teleop before sending web drive commands.");
   const [teleopMode, setTeleopMode] = useState("keyboard");
+  const [mapViewReset, setMapViewReset] = useState(0);
 
   async function handleStartTeleop() {
     setTeleopStatus("starting");
@@ -146,23 +149,21 @@ function MapsPage({ robot }) {
         title="Mapping and localization"
         description="Placeholder map surface for later Nav2, SLAM, saved map selection, and goal-setting workflows."
         actions={
-          <>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white">
-              <LocateFixed className="h-4 w-4" aria-hidden="true" />
-              Center
-            </button>
-            <button className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink">
-              <Crosshair className="h-4 w-4" aria-hidden="true" />
-              Set Goal
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => setMapViewReset((value) => value + 1)}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+          >
+            <LocateFixed className="h-4 w-4" aria-hidden="true" />
+            Center
+          </button>
         }
       />
 
       <section className="grid gap-4 xl:grid-cols-[1fr_280px]">
         <div className="space-y-4">
           <div className="relative min-h-[72vh] overflow-hidden rounded-md border border-console-line bg-white">
-            <LiveMapCanvas liveMap={liveMap} pose={pose} />
+            <LiveMapCanvas liveMap={liveMap} pose={pose} resetSignal={mapViewReset} />
             <div className="absolute bottom-4 left-4 rounded-md border border-console-line bg-white px-3 py-2 text-sm">
               Active map: {navigation.activeMap ?? "Waiting"}
             </div>
@@ -262,13 +263,22 @@ function MapsPage({ robot }) {
               <input className="h-10 w-full rounded-md border border-console-line px-3" defaultValue="0" />
             </label>
           </div>
-          <button
-            type="button"
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
-          >
-            <Send className="h-4 w-4" aria-hidden="true" />
-            Send Goal
-          </button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+            >
+              <Crosshair className="h-4 w-4" aria-hidden="true" />
+              Set Target
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-console-rail px-3 text-sm font-semibold text-white"
+            >
+              <Send className="h-4 w-4" aria-hidden="true" />
+              Send Goal
+            </button>
+          </div>
             </div>
           </div>
         </div>
@@ -436,9 +446,17 @@ function MappingStatusLight({ status }) {
   );
 }
 
-function LiveMapCanvas({ liveMap, pose }) {
+function LiveMapCanvas({ liveMap, pose, resetSignal }) {
   const canvasRef = useRef(null);
+  const dragRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const hasMap = Array.isArray(liveMap.data) && liveMap.data.length > 0 && liveMap.width > 0 && liveMap.height > 0;
+
+  useEffect(() => {
+    setZoom(1);
+    setOffset({ x: 0, y: 0 });
+  }, [resetSignal]);
 
   useEffect(() => {
     if (!hasMap || !canvasRef.current) return;
@@ -502,6 +520,42 @@ function LiveMapCanvas({ liveMap, pose }) {
     }
   }, [hasMap, liveMap, pose]);
 
+  function updateZoom(nextZoom) {
+    setZoom(Math.min(4, Math.max(0.5, nextZoom)));
+  }
+
+  function handlePointerDown(event) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: offset.x,
+      originY: offset.y
+    };
+  }
+
+  function handlePointerMove(event) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    setOffset({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY
+    });
+  }
+
+  function handlePointerUp(event) {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+    }
+  }
+
+  function handleWheel(event) {
+    event.preventDefault();
+    updateZoom(zoom + (event.deltaY < 0 ? 0.15 : -0.15));
+  }
+
   if (!hasMap) {
     return (
       <div className="map-grid absolute inset-0 flex items-center justify-center bg-[#f8fafc]">
@@ -513,13 +567,60 @@ function LiveMapCanvas({ liveMap, pose }) {
   }
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-[#d8dde7]">
-      <canvas ref={canvasRef} className="h-full w-full object-contain [image-rendering:pixelated]" />
+    <div
+      className="absolute inset-0 flex touch-none cursor-grab items-center justify-center overflow-hidden bg-[#d8dde7] active:cursor-grabbing"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onWheel={handleWheel}
+    >
+      <canvas
+        ref={canvasRef}
+        className="h-full w-full object-contain [image-rendering:pixelated]"
+        style={{
+          transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+          transformOrigin: "center",
+          transition: dragRef.current ? "none" : "transform 120ms ease-out"
+        }}
+      />
       <div className="absolute left-4 top-4 rounded-md border border-console-line bg-white px-3 py-2 text-xs text-slate-600">
         <div className="font-semibold text-console-ink">/map</div>
         <div className="mt-1">{liveMap.width} x {liveMap.height}</div>
         <div>{liveMap.resolution ?? "?"} m/px</div>
         <div>{liveMap.status ?? "Receiving map"}</div>
+      </div>
+      <div
+        className="absolute bottom-4 right-4 flex overflow-hidden rounded-md border border-console-line bg-white shadow-soft"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            updateZoom(zoom - 0.25);
+          }}
+          className="flex h-9 w-9 items-center justify-center border-r border-console-line text-console-ink"
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          <Minus className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <div className="flex h-9 min-w-14 items-center justify-center px-2 font-mono text-xs text-slate-600">
+          {Math.round(zoom * 100)}%
+        </div>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            updateZoom(zoom + 0.25);
+          }}
+          className="flex h-9 w-9 items-center justify-center border-l border-console-line text-console-ink"
+          aria-label="Zoom in"
+          title="Zoom in"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
     </div>
   );

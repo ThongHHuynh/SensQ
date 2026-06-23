@@ -14,6 +14,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 def generate_launch_description():
     serial_port = LaunchConfiguration("serial_port")
     baud = LaunchConfiguration("baud")
+    lidar_serial_port = LaunchConfiguration("lidar_serial_port")
+    lidar_serial_baudrate = LaunchConfiguration("lidar_serial_baudrate")
     map_yaml = LaunchConfiguration("map")
     params_file = LaunchConfiguration("params_file")
     use_rviz = LaunchConfiguration("use_rviz")
@@ -109,7 +111,11 @@ def generate_launch_description():
     )
 
     lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(robot_bringup_path, "launch", "lidar.launch.py"))
+        PythonLaunchDescriptionSource(os.path.join(robot_bringup_path, "launch", "lidar.launch.py")),
+        launch_arguments={
+            "serial_port": lidar_serial_port,
+            "serial_baudrate": lidar_serial_baudrate,
+        }.items(),
     )
 
     nav2_bringup = IncludeLaunchDescription(
@@ -159,6 +165,16 @@ def generate_launch_description():
                 "baud",
                 default_value="115200",
                 description="Serial baud rate used by the mobile base hardware interface.",
+            ),
+            DeclareLaunchArgument(
+                "lidar_serial_port",
+                default_value="/dev/ttyUSB0",
+                description="Serial port used by the SLLidar device.",
+            ),
+            DeclareLaunchArgument(
+                "lidar_serial_baudrate",
+                default_value="460800",
+                description="Serial baud rate used by the SLLidar device.",
             ),
             DeclareLaunchArgument(
                 "map",

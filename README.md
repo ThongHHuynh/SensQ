@@ -199,6 +199,16 @@ ROS responsibilities:
 - Robot state
 - Low-level safety behavior
 
+Real robot floor Nav2:
+
+```bash
+cd /home/tom/SensQ/ros2_ws
+ros2 launch my_robot_bringup real_nav2_floor.launch.py \
+  serial_port:=/dev/ttyACM0 lidar_serial_port:=/dev/ttyUSB0
+```
+
+Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar model.
+
 ROS interfaces:
 
 | Feature | ROS Interface |

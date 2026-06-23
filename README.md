@@ -210,7 +210,8 @@ ros2 launch my_robot_bringup real_nav2_floor.launch.py \
 
 Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar model.
 This launch runs Nav2 with real time. `/map` comes from `map_server`, and AMCL publishes `map -> odom` after it has the map, `/scan`, odom TF, and an initial pose.
-The floor launch defaults to `ros2_ws/maps/floor.yaml`. Global and local costmaps use the map plus live lidar and inflation layers, so they will not look identical to the raw YAML map.
+The floor launch defaults to `ros2_ws/maps/my_map.yaml`. Global and local costmaps use the map plus live lidar and inflation layers, so they will not look identical to the raw YAML map.
+For a smaller Nav2 config, pass `params_file:=/home/tom/SensQ/ros2_ws/src/my_robot_bringup/config/nav2_config.yaml`.
 
 ROS interfaces:
 

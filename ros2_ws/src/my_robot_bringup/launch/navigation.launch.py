@@ -25,8 +25,11 @@ def generate_launch_description():
     gazebo_config_path = os.path.join(robot_bringup_path, 'config', 'gazebo_bridge.yaml')
     nav2_params_path = os.path.join(robot_bringup_path, 'config', 'nav2_params.yaml')
     world_path = os.path.join(robot_description_path, 'worlds', 'maze.sdf')
-    #nav_map_path = '/home/tom/maps/simple_maze.yaml'
-    nav_map_path = '/ros2_ws/maps/my_map.yaml'
+    nav_map_path = os.path.join(
+        os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
+        "maps",
+        "simple_maze.yaml",
+    )
 
     robot_description = ParameterValue(Command(['xacro ', urdf_path,' ',
                                                 'use_mock_hardware:=', 'true' if use_mock else 'false', ' ',

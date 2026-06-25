@@ -210,9 +210,18 @@ ros2 launch my_robot_bringup real_nav2_floor.launch.py \
 
 Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar model.
 This launch runs Nav2 with real time. `/map` comes from `map_server`, and AMCL publishes `map -> odom` after it has the map, `/scan`, odom TF, and an initial pose.
-The floor launch defaults to `ros2_ws/maps/my_map.yaml`. Global and local costmaps use the map plus live lidar and inflation layers, so they will not look identical to the raw YAML map.
-For a smaller Nav2 config, pass `params_file:=/home/tom/SensQ/ros2_ws/src/my_robot_bringup/config/nav2_config.yaml`.
-That file keeps the Humble BT helper nodes required by this setup.
+The floor launch defaults to `ros2_ws/maps/my_map.yaml` and `nav2_config.yaml`.
+The global costmap uses the saved map plus inflation; live lidar obstacles stay in the local costmap.
+
+Clean small map specks with:
+
+```bash
+./scripts/clean_nav2_map.py ros2_ws/maps/my_map.yaml
+```
+
+Gazebo Nav2 uses `ros2_ws/maps/simple_maze.yaml` by default. AMCL publishes
+`map -> odom` only after `map_server` loads that map and `/scan`, `/odom`, and
+`odom -> base_footprint` are available.
 
 ROS interfaces:
 

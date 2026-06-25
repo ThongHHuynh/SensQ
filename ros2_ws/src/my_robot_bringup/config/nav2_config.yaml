@@ -217,21 +217,10 @@ global_costmap:
       track_unknown_space: true
       update_frequency: 2.0
       publish_frequency: 2.0
-      plugins: [static_layer, obstacle_layer, inflation_layer]
+      plugins: [static_layer, inflation_layer]
       static_layer:
         plugin: nav2_costmap_2d::StaticLayer
         map_subscribe_transient_local: true
-      obstacle_layer:
-        plugin: nav2_costmap_2d::ObstacleLayer
-        enabled: true
-        observation_sources: scan
-        scan:
-          topic: /scan
-          data_type: LaserScan
-          marking: true
-          clearing: true
-          obstacle_max_range: 2.5
-          raytrace_max_range: 3.0
       inflation_layer:
         plugin: nav2_costmap_2d::InflationLayer
         inflation_radius: 0.35

@@ -145,14 +145,14 @@ def generate_launch_description():
         actions=[nav2_dir],
     )
 
-    rviz2_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        arguments=["-d", rviz_config],
-        parameters=[{"use_sim_time": False}],
-        condition=IfCondition(use_rviz),
-        output="screen",
-    )
+    # rviz2_node = Node(
+    #     package="rviz2",
+    #     executable="rviz2",
+    #     arguments=["-d", rviz_config],
+    #     parameters=[{"use_sim_time": False}],
+    #     condition=IfCondition(use_rviz),
+    #     output="screen",
+    # )
 
     return LaunchDescription(
         [
@@ -202,6 +202,6 @@ def generate_launch_description():
             start_diff_drive_after_joint_state_broadcaster,
             lidar_launch,
             delayed_nav2,
-            rviz2_node,
+            # rviz2_node,
         ]
     )

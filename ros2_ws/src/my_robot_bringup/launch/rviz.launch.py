@@ -12,6 +12,14 @@ def generate_launch_description():
         executable='rviz2',
         arguments=['-d',rviz_config_path]
     )
+
+    rviz2_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        arguments=["-d", rviz_config_path],
+        parameters=[{"use_sim_time": False}],
+        output="screen",
+    )
     ld = LaunchDescription()
     ld.add_action(rviz2_node)
     return ld

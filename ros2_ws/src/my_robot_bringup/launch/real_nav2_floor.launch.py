@@ -31,7 +31,7 @@ def generate_launch_description():
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",
-        "my_map.yaml",
+        "my_map_cleaned.yaml",
     )
 
     robot_description = ParameterValue(
@@ -99,7 +99,7 @@ def generate_launch_description():
     )
 
     delayed_joint_state_broadcaster = TimerAction(
-        period=2.0,
+        period=4.0,
         actions=[joint_state_broadcaster],
     )
 
@@ -141,7 +141,7 @@ def generate_launch_description():
     )
 
     delayed_nav2 = TimerAction(
-        period=2.0,
+        period=4.0,
         actions=[nav2_dir],
     )
 

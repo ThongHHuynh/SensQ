@@ -209,9 +209,9 @@ ros2 launch my_robot_bringup real_nav2_floor.launch.py \
 ```
 
 Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar model.
-This launch runs Nav2 with real time. `/map` comes from `map_server`, and AMCL publishes `map -> odom` after it has the map, `/scan`, odom TF, and an initial pose.
-The floor launch defaults to `ros2_ws/maps/my_map.yaml` and `nav2_config.yaml`.
-The global costmap uses the saved map plus inflation; live lidar obstacles stay in the local costmap.
+This launch runs Nav2 with real time. It defaults to `ros2_ws/maps/floor.yaml`
+and `nav2_config.yaml`, and opens the Nav2 RViz view fixed to `map`. Set the
+robot pose in RViz before navigating; AMCL then publishes `map -> odom`.
 
 Clean small map specks with:
 

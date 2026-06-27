@@ -23,15 +23,16 @@ def generate_launch_description():
 
     robot_description_path = get_package_share_path("my_robot_description")
     robot_bringup_path = get_package_share_path("my_robot_bringup")
+    robot_navigation_path = get_package_share_path("my_robot_navigation")
 
     urdf_path = os.path.join(robot_description_path, "urdf", "my_robot.urdf.xacro")
     controller_path = os.path.join(robot_bringup_path, "config", "my_robot_controller.yaml")
     default_nav2_params_path = os.path.join(robot_bringup_path, "config", "nav2_config.yaml")
-    default_rviz_config_path = os.path.join(robot_description_path, "rviz", "urdf_config.rviz")
+    default_rviz_config_path = os.path.join(robot_navigation_path, "rviz", "navigation_config.rviz")
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",
-        "my_map_cleaned.yaml",
+        "floor.yaml",
     )
 
     robot_description = ParameterValue(
@@ -145,14 +146,14 @@ def generate_launch_description():
         actions=[nav2_dir],
     )
 
-    # rviz2_node = Node(
-    #     package="rviz2",
-    #     executable="rviz2",
-    #     arguments=["-d", rviz_config],
-    #     parameters=[{"use_sim_time": False}],
-    #     condition=IfCondition(use_rviz),
-    #     output="screen",
-    # )
+    rviz2_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        arguments=["-d", rviz_config],
+        parameters=[{"use_sim_time": False}],
+        condition=IfCondition(use_rviz),
+        output="screen",
+    )
 
     return LaunchDescription(
         [
@@ -202,6 +203,6 @@ def generate_launch_description():
             start_diff_drive_after_joint_state_broadcaster,
             lidar_launch,
             delayed_nav2,
-            # rviz2_node,
+            rviz2_node,
         ]
     )

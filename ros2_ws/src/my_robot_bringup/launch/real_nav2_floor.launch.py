@@ -32,7 +32,11 @@ def generate_launch_description():
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",
+<<<<<<< Updated upstream
         "floor.yaml",
+=======
+        "floor_v1.yaml",
+>>>>>>> Stashed changes
     )
 
     robot_description = ParameterValue(

@@ -5,8 +5,9 @@ import cv2
 import numpy as np
 
 from rclpy.node import Node
-from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import OccupancyGrid, Path
 from geometry_msgs.msg import PoseStamped
+from visualization_msgs.msg import Marker, MarkerArray
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
 
@@ -15,20 +16,36 @@ class CoveragePlanner(Node):
         super().__init__('coverage_planner')
 
         self.map_msg = None
-        self.sub = self.create_subscription(
+
+        self.map_sub = self.create_subscription(
             OccupancyGrid,
             '/map',
             self.map_callback,
             10
         )
 
+        self.path_pub = self.create_publisher(
+            Path,
+            '/coverage_path',
+            10
+        )
+
+        self.marker_pub = self.create_publisher(
+            MarkerArray,
+            '/coverage_points',
+            10
+        )
+
         self.navigator = BasicNavigator()
+
         self.get_logger().info("Waiting for /map...")
 
     def map_callback(self, msg):
         self.map_msg = msg
         self.get_logger().info("Map received.")
-        self.destroy_subscription(self.sub)
+
+        self.destroy_subscription(self.map_sub)
+
         self.run_coverage()
 
     def run_coverage(self):
@@ -41,8 +58,7 @@ class CoveragePlanner(Node):
 
         free = (grid == 0).astype(np.uint8) * 255
 
-        # shrink free space to keep robot away from walls
-        clearance_m = 0.25
+        clearance_m = 0.30
         r = int(clearance_m / msg.info.resolution)
 
         kernel = cv2.getStructuringElement(
@@ -55,7 +71,7 @@ class CoveragePlanner(Node):
         waypoints_px = self.generate_lawnmower_path(
             safe_free,
             msg.info.resolution,
-            spacing_m=0.25
+            spacing_m=0.30
         )
 
         poses = []
@@ -66,14 +82,21 @@ class CoveragePlanner(Node):
             pose = PoseStamped()
             pose.header.frame_id = "map"
             pose.header.stamp = self.get_clock().now().to_msg()
+
             pose.pose.position.x = x
             pose.pose.position.y = y
+            pose.pose.position.z = 0.0
+
             pose.pose.orientation.z = np.sin(yaw / 2.0)
             pose.pose.orientation.w = np.cos(yaw / 2.0)
 
             poses.append(pose)
 
-        self.get_logger().info(f"Generated {len(poses)} coverage poses.")
+        self.publish_path(poses)
+        self.publish_markers(poses)
+
+        self.get_logger().info(f"Published {len(poses)} coverage poses.")
+        self.get_logger().info("RViz topics: /coverage_path and /coverage_points")
 
         self.navigator.waitUntilNav2Active()
         self.navigator.goThroughPoses(poses)
@@ -104,8 +127,8 @@ class CoveragePlanner(Node):
                     waypoints.append((x1, y, 0.0))
                     waypoints.append((x2, y, 0.0))
                 else:
-                    waypoints.append((x2, y, 3.14))
-                    waypoints.append((x1, y, 3.14))
+                    waypoints.append((x2, y, 3.14159))
+                    waypoints.append((x1, y, 3.14159))
 
                 direction *= -1
 
@@ -115,6 +138,42 @@ class CoveragePlanner(Node):
         x = msg.info.origin.position.x + x_px * msg.info.resolution
         y = msg.info.origin.position.y + y_px * msg.info.resolution
         return x, y
+
+    def publish_path(self, poses):
+        path = Path()
+        path.header.frame_id = "map"
+        path.header.stamp = self.get_clock().now().to_msg()
+        path.poses = poses
+
+        self.path_pub.publish(path)
+
+    def publish_markers(self, poses):
+        marker_array = MarkerArray()
+
+        for i, pose in enumerate(poses):
+            marker = Marker()
+            marker.header.frame_id = "map"
+            marker.header.stamp = self.get_clock().now().to_msg()
+
+            marker.ns = "coverage_waypoints"
+            marker.id = i
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+
+            marker.pose = pose.pose
+
+            marker.scale.x = 0.08
+            marker.scale.y = 0.08
+            marker.scale.z = 0.08
+
+            marker.color.r = 1.0
+            marker.color.g = 0.2
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+
+            marker_array.markers.append(marker)
+
+        self.marker_pub.publish(marker_array)
 
 
 def main(args=None):

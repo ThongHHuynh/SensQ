@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'coverage_node = coverage_planner.coverage_node:main',
         ],
     },
 )

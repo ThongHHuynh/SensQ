@@ -14,3 +14,7 @@ docker exec -it ros2_dev bash
 cd ~
 sudo chown -R $USER:$USER ros2_ws
 ```
+
+# Updates 6/27/2026
+- Navigation is running using nav2
+- Error: global costmap is off from local and lidar -> Solution: match the location start mapping to location start navigating

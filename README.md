@@ -453,3 +453,5 @@ npm run dev -- --host 0.0.0.0
 6. Use REST for commands, WebSocket for live status, and video streaming for camera.
 7. Keep machine-specific config out of Git.
 8. Use a physical hardware E-stop for real robot safety.
+
+

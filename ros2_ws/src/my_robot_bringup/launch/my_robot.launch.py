@@ -20,7 +20,7 @@ def generate_launch_description():
 
     #urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
     urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
-    rviz_config_path = os.path.join(robot_description_path, 'rviz', 'urdf_config.rviz')
+    rviz_config_path = os.path.join(robot_description_path, 'rviz', 'lidar_config.rviz')
     controller_path = os.path.join(robot_bringup_path, 'config', 'my_robot_controller.yaml')
     slam_toolbox_path = os.path.join(robot_bringup_path, 'config', 'slam_toolbox.yaml')
 

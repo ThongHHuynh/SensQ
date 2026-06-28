@@ -5,36 +5,34 @@ import cv2
 import numpy as np
 
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy
+
 from nav_msgs.msg import OccupancyGrid, Path
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
+
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
 
 class CoveragePlanner(Node):
     def __init__(self):
-        super().__init__('coverage_planner')
+        super().__init__("coverage_planner")
 
         self.map_msg = None
 
+        map_qos = QoSProfile(depth=1)
+        map_qos.durability = QoSDurabilityPolicy.TRANSIENT_LOCAL
+        map_qos.reliability = QoSReliabilityPolicy.RELIABLE
+
         self.map_sub = self.create_subscription(
             OccupancyGrid,
-            '/map',
+            "/map",
             self.map_callback,
-            10
+            map_qos
         )
 
-        self.path_pub = self.create_publisher(
-            Path,
-            '/coverage_path',
-            10
-        )
-
-        self.marker_pub = self.create_publisher(
-            MarkerArray,
-            '/coverage_points',
-            10
-        )
+        self.path_pub = self.create_publisher(Path, "/coverage_path", 10)
+        self.marker_pub = self.create_publisher(MarkerArray, "/coverage_points", 10)
 
         self.navigator = BasicNavigator()
 
@@ -43,15 +41,13 @@ class CoveragePlanner(Node):
     def map_callback(self, msg):
         self.map_msg = msg
         self.get_logger().info("Map received.")
-
         self.destroy_subscription(self.map_sub)
-
         self.run_coverage()
 
     def run_coverage(self):
         msg = self.map_msg
 
-        grid = np.array(msg.data).reshape(
+        grid = np.array(msg.data, dtype=np.int16).reshape(
             msg.info.height,
             msg.info.width
         )
@@ -59,7 +55,9 @@ class CoveragePlanner(Node):
         free = (grid == 0).astype(np.uint8) * 255
 
         clearance_m = 0.30
-        r = int(clearance_m / msg.info.resolution)
+        spacing_m = 0.30
+
+        r = max(1, int(clearance_m / msg.info.resolution))
 
         kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE,
@@ -71,7 +69,7 @@ class CoveragePlanner(Node):
         waypoints_px = self.generate_lawnmower_path(
             safe_free,
             msg.info.resolution,
-            spacing_m=0.30
+            spacing_m
         )
 
         poses = []
@@ -87,8 +85,8 @@ class CoveragePlanner(Node):
             pose.pose.position.y = y
             pose.pose.position.z = 0.0
 
-            pose.pose.orientation.z = np.sin(yaw / 2.0)
-            pose.pose.orientation.w = np.cos(yaw / 2.0)
+            pose.pose.orientation.z = float(np.sin(yaw / 2.0))
+            pose.pose.orientation.w = float(np.cos(yaw / 2.0))
 
             poses.append(pose)
 
@@ -96,7 +94,12 @@ class CoveragePlanner(Node):
         self.publish_markers(poses)
 
         self.get_logger().info(f"Published {len(poses)} coverage poses.")
-        self.get_logger().info("RViz topics: /coverage_path and /coverage_points")
+        self.get_logger().info("RViz: add /coverage_path as Path.")
+        self.get_logger().info("RViz: add /coverage_points as MarkerArray.")
+
+        if len(poses) == 0:
+            self.get_logger().warn("No coverage poses generated.")
+            return
 
         self.navigator.waitUntilNav2Active()
         self.navigator.goThroughPoses(poses)
@@ -180,8 +183,9 @@ def main(args=None):
     rclpy.init(args=args)
     node = CoveragePlanner()
     rclpy.spin(node)
+    node.destroy_node()
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

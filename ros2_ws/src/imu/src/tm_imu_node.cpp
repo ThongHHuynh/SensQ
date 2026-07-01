@@ -37,8 +37,6 @@ TMSerial::TMSerial() : rclcpp::Node("tm_imu")
     // Create timer
     std::chrono::milliseconds period = std::chrono::milliseconds(this->get_parameter("timer_period").as_int());
     timer_ = this->create_wall_timer(period, std::bind(&TMSerial::TimerCallback, this));
-    // Create tf_broadcaster
-    tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 }
 
 
@@ -63,7 +61,6 @@ void TMSerial::TimerCallback()
     imu_data_mag_msg.header.stamp = this->get_clock()->now();
     FillCovarianceMatrices();
     // Publish msg
-    PublishTransform();
     publisher_IMU->publish(imu_data_msg);
     publisher_IMU_RPY->publish(imu_data_rpy_msg);
     publisher_IMU_MAG->publish(imu_data_mag_msg);
@@ -290,25 +287,6 @@ void TMSerial::FillCovarianceMatrices()
         imu_data_mag_msg.magnetic_field_covariance[i] = 0.1;
     }
 }
-
-
-void TMSerial::PublishTransform()
-{
-    geometry_msgs::msg::TransformStamped transform_;
-    transform_.header.stamp = this->get_clock()->now();
-    transform_.header.frame_id = "world";
-    transform_.child_frame_id = this->get_parameter("imu_frame_id").as_string();
-    transform_.transform.translation.x = this->get_parameter("transform").as_double_array()[0];
-    transform_.transform.translation.y = this->get_parameter("transform").as_double_array()[1];
-    transform_.transform.translation.z = this->get_parameter("transform").as_double_array()[2];
-
-    transform_.transform.rotation.x = imu_data_msg.orientation.x;
-    transform_.transform.rotation.y = imu_data_msg.orientation.y;
-    transform_.transform.rotation.z = imu_data_msg.orientation.z;
-    transform_.transform.rotation.w = imu_data_msg.orientation.w;
-    tf_broadcaster_->sendTransform(transform_);
-}
-
 
 int main(int argc, char *argv[])
 {

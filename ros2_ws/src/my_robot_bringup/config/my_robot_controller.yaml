@@ -21,7 +21,8 @@ diff_drive_controller: #same with the name above, this is for parameters
     pose_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
     twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
 
-    enable_odom_tf: true 
+    #enable_odom_tf: true for raw odom, false for filtered odom
+    enable_odom_tf: false
     publish_rate: 50.0 #should be double
     use_stamped_vel: false
 

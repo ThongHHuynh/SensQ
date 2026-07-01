@@ -1,0 +1,9 @@
+map_processor_node:
+  ros__parameters:
+    clearance_m: 0.3
+
+path_generator_node:
+  ros__parameters:
+    spacing_m: 0.5
+
+

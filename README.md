@@ -219,6 +219,22 @@ Clean small map specks with:
 ./scripts/clean_nav2_map.py ros2_ws/maps/my_map.yaml
 ```
 
+Coverage path:
+
+```bash
+cd /home/tom/SensQ/ros2_ws
+colcon build --packages-select coverage_planner
+source install/setup.bash
+ros2 launch coverage_planner coverage.launch.py
+```
+
+Add `/coverage_path` as `Path` and `/coverage_points` as `MarkerArray` in RViz.
+After checking the path, drive it with:
+
+```bash
+ros2 launch coverage_planner coverage.launch.py execute_coverage:=true
+```
+
 Gazebo Nav2 uses `ros2_ws/maps/simple_maze.yaml` by default. AMCL publishes
 `map -> odom` only after `map_server` loads that map and `/scan`, `/odom`, and
 `odom -> base_footprint` are available.
@@ -453,5 +469,4 @@ npm run dev -- --host 0.0.0.0
 6. Use REST for commands, WebSocket for live status, and video streaming for camera.
 7. Keep machine-specific config out of Git.
 8. Use a physical hardware E-stop for real robot safety.
-
 

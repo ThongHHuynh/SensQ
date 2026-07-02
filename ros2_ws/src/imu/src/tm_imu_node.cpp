@@ -1,4 +1,5 @@
 #include "tm_imu/tm_imu_node.hpp"
+#include <cmath>
 
 EasyObjectDictionary eOD;
 EasyProfile eP(&eOD);
@@ -17,6 +18,7 @@ TMSerial::TMSerial() : rclcpp::Node("tm_imu")
     this->declare_parameter("parent_frame_id", "base_link");
     this->declare_parameter("timer_period",     50);            // Unit: ms
     this->declare_parameter("transform",        std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+    this->declare_parameter("publish_tf",        true);          // Set to false when using robot_localization
     // Declare a serial object
     serialib1 = new serialib;
     SerialportOpen();
@@ -26,6 +28,11 @@ TMSerial::TMSerial() : rclcpp::Node("tm_imu")
     count2   = 0;
     timer_10 = this->create_wall_timer(std::chrono::milliseconds(DEBUG_MODE_PRINT_TIMER_MS_), std::bind(&TMSerial::TimerCallback2, this));
     #endif
+    // Initialize orientation to identity quaternion
+    imu_data_msg.orientation.w = 1.0;
+    imu_data_msg.orientation.x = 0.0;
+    imu_data_msg.orientation.y = 0.0;
+    imu_data_msg.orientation.z = 0.0;
     // Set frame id
     imu_data_msg.header.frame_id     = this->get_parameter("imu_frame_id").as_string();
     imu_data_rpy_msg.header.frame_id = this->get_parameter("imu_frame_id").as_string();
@@ -62,8 +69,10 @@ void TMSerial::TimerCallback()
     imu_data_rpy_msg.header.stamp = this->get_clock()->now();
     imu_data_mag_msg.header.stamp = this->get_clock()->now();
     FillCovarianceMatrices();
-    // Publish msg
-    PublishTransform();
+    // Publish msg (TF broadcast can be disabled for robot_localization compatibility)
+    if (this->get_parameter("publish_tf").as_bool()) {
+        PublishTransform();
+    }
     publisher_IMU->publish(imu_data_msg);
     publisher_IMU_RPY->publish(imu_data_rpy_msg);
     publisher_IMU_MAG->publish(imu_data_mag_msg);
@@ -154,9 +163,11 @@ bool TMSerial::OnSerialRX()
                     imu_data_msg.angular_velocity.y =  gyro_y;
                     imu_data_msg.angular_velocity.z =  gyro_z;
 
-                    imu_data_msg.linear_acceleration.x = acc_x; 
-                    imu_data_msg.linear_acceleration.y = acc_y;
-                    imu_data_msg.linear_acceleration.z = acc_z;
+                    // Convert from g to m/s² (sensor_msgs/Imu expects m/s²)
+                    constexpr float G_TO_MS2 = 9.80665f;
+                    imu_data_msg.linear_acceleration.x = acc_x * G_TO_MS2; 
+                    imu_data_msg.linear_acceleration.y = acc_y * G_TO_MS2;
+                    imu_data_msg.linear_acceleration.z = acc_z * G_TO_MS2;
 
                     imu_data_mag_msg.magnetic_field.x = mag_x;
                     imu_data_mag_msg.magnetic_field.y = mag_y;
@@ -211,6 +222,21 @@ bool TMSerial::OnSerialRX()
                     imu_data_rpy_msg.magnetic_field.x = roll;
                     imu_data_rpy_msg.magnetic_field.y = pitch;
                     imu_data_rpy_msg.magnetic_field.z = yaw;
+
+                    // Convert RPY (degrees) to quaternion for orientation
+                    // RPY from sensor are in degrees, tf2 expects radians
+                    double roll_rad  = roll  * M_PI / 180.0;
+                    double pitch_rad = pitch * M_PI / 180.0;
+                    double yaw_rad   = yaw   * M_PI / 180.0;
+
+                    tf2::Quaternion q;
+                    q.setRPY(roll_rad, pitch_rad, yaw_rad);
+                    q.normalize();
+
+                    imu_data_msg.orientation.w = q.w();
+                    imu_data_msg.orientation.x = q.x();
+                    imu_data_msg.orientation.y = q.y();
+                    imu_data_msg.orientation.z = q.z();
                     #ifdef DEBUG_MODE
                     //RCLCPP_INFO(this->get_logger(), "RPY pkg");
                     #endif
@@ -249,14 +275,16 @@ bool TMSerial::OnSerialRX()
                     imu_data_msg.angular_velocity.y =  wy;
                     imu_data_msg.angular_velocity.z =  wz;
 
-                    imu_data_msg.linear_acceleration.x = ax; 
-                    imu_data_msg.linear_acceleration.y = ay;
-                    imu_data_msg.linear_acceleration.z = az;
+                    // Convert from g to m/s² (sensor_msgs/Imu expects m/s²)
+                    constexpr float G_TO_MS2_COMBO = 9.80665f;
+                    imu_data_msg.linear_acceleration.x = ax * G_TO_MS2_COMBO; 
+                    imu_data_msg.linear_acceleration.y = ay * G_TO_MS2_COMBO;
+                    imu_data_msg.linear_acceleration.z = az * G_TO_MS2_COMBO;
 
-                    imu_data_msg.orientation.x = q1;
-                    imu_data_msg.orientation.y = q2;
-                    imu_data_msg.orientation.z = q3;
-                    imu_data_msg.orientation.w = q4;
+                    imu_data_msg.orientation.w = q1;
+                    imu_data_msg.orientation.x = q2;
+                    imu_data_msg.orientation.y = q3;
+                    imu_data_msg.orientation.z = q4;
 
                     imu_data_rpy_msg.magnetic_field.x = roll;
                     imu_data_rpy_msg.magnetic_field.y = pitch;
@@ -282,13 +310,32 @@ bool TMSerial::OnSerialRX()
     
 void TMSerial::FillCovarianceMatrices()
 {
+    // Proper diagonal covariance matrices for robot_localization compatibility.
+    // Off-diagonal elements must be 0 (no cross-correlation assumed).
+    // Diagonal values represent variance for each axis.
     for(int i = 0; i < 9; i++){
-        imu_data_msg.orientation_covariance[i]        = 0.1;
-        imu_data_msg.angular_velocity_covariance[i]   = 0.1;
-        imu_data_msg.linear_acceleration_covariance[i]= 0.1;
-        imu_data_rpy_msg.magnetic_field_covariance[i] = 0.1;
-        imu_data_mag_msg.magnetic_field_covariance[i] = 0.1;
+        imu_data_msg.orientation_covariance[i]         = 0.0;
+        imu_data_msg.angular_velocity_covariance[i]    = 0.0;
+        imu_data_msg.linear_acceleration_covariance[i] = 0.0;
+        imu_data_rpy_msg.magnetic_field_covariance[i]  = 0.0;
+        imu_data_mag_msg.magnetic_field_covariance[i]  = 0.0;
     }
+    // Set diagonal elements (variance per axis: [0]=xx, [4]=yy, [8]=zz)
+    imu_data_msg.orientation_covariance[0]         = 0.0025;  // orientation variance (~2.9 deg std dev)
+    imu_data_msg.orientation_covariance[4]         = 0.0025;
+    imu_data_msg.orientation_covariance[8]         = 0.0025;
+    imu_data_msg.angular_velocity_covariance[0]    = 0.0003;  // gyro variance
+    imu_data_msg.angular_velocity_covariance[4]    = 0.0003;
+    imu_data_msg.angular_velocity_covariance[8]    = 0.0003;
+    imu_data_msg.linear_acceleration_covariance[0] = 0.01;    // accel variance
+    imu_data_msg.linear_acceleration_covariance[4] = 0.01;
+    imu_data_msg.linear_acceleration_covariance[8] = 0.01;
+    imu_data_rpy_msg.magnetic_field_covariance[0]  = 0.01;
+    imu_data_rpy_msg.magnetic_field_covariance[4]  = 0.01;
+    imu_data_rpy_msg.magnetic_field_covariance[8]  = 0.01;
+    imu_data_mag_msg.magnetic_field_covariance[0]  = 0.01;
+    imu_data_mag_msg.magnetic_field_covariance[4]  = 0.01;
+    imu_data_mag_msg.magnetic_field_covariance[8]  = 0.01;
 }
 
 

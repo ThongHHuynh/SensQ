@@ -212,11 +212,28 @@ Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar 
 This launch runs Nav2 with real time. It defaults to `ros2_ws/maps/floor.yaml`
 and `nav2_config.yaml`, and opens the Nav2 RViz view fixed to `map`. Set the
 robot pose in RViz before navigating; AMCL then publishes `map -> odom`.
+IMU publishes `/imu_data`; URDF owns `base_link -> imu_link`.
 
 Clean small map specks with:
 
 ```bash
 ./scripts/clean_nav2_map.py ros2_ws/maps/my_map.yaml
+```
+
+Coverage path:
+
+```bash
+cd /home/tom/SensQ/ros2_ws
+colcon build --packages-select coverage_planner
+source install/setup.bash
+ros2 launch coverage_planner coverage.launch.py
+```
+
+Add `/coverage_path` as `Path` and `/coverage_points` as `MarkerArray` in RViz.
+After checking the path, drive it with:
+
+```bash
+ros2 launch coverage_planner coverage.launch.py execute_coverage:=true
 ```
 
 Gazebo Nav2 uses `ros2_ws/maps/simple_maze.yaml` by default. AMCL publishes
@@ -453,5 +470,3 @@ npm run dev -- --host 0.0.0.0
 6. Use REST for commands, WebSocket for live status, and video streaming for camera.
 7. Keep machine-specific config out of Git.
 8. Use a physical hardware E-stop for real robot safety.
-
-

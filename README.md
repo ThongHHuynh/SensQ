@@ -212,6 +212,7 @@ Use `lidar_serial_baudrate:=115200`, `256000`, or `460800` to match the SLLidar 
 This launch runs Nav2 with real time. It defaults to `ros2_ws/maps/floor.yaml`
 and `nav2_config.yaml`, and opens the Nav2 RViz view fixed to `map`. Set the
 robot pose in RViz before navigating; AMCL then publishes `map -> odom`.
+IMU publishes `/imu_data`; URDF owns `base_link -> imu_link`.
 
 Clean small map specks with:
 
@@ -469,4 +470,3 @@ npm run dev -- --host 0.0.0.0
 6. Use REST for commands, WebSocket for live status, and video streaming for camera.
 7. Keep machine-specific config out of Git.
 8. Use a physical hardware E-stop for real robot safety.
-

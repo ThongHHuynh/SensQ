@@ -56,6 +56,8 @@ class MapProcessorNode(Node):
 
         safe_msg = OccupancyGrid()
         safe_msg.header = msg.header
+        safe_msg.header.stamp.sec = 0
+        safe_msg.header.stamp.nanosec = 0
         safe_msg.info = msg.info
         safe_msg.data = safe_grid.flatten().astype(int).tolist()
         

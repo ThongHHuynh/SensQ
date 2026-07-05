@@ -1,0 +1,13 @@
+map_processor_node:
+  ros__parameters:
+    clearance_m: 0.35
+
+open_coverage_path:
+  ros__parameters:
+    map_topic: /coverage/safe_map
+    boundary_topic: /coverage/opennav_boundary
+    wkt_topic: /coverage/opennav_wkt
+    marker_topic: /coverage/opennav_polygons
+    contour_simplification_px: 1.0
+    min_region_area_m2: 0.20
+    min_hole_area_m2: 0.02

@@ -19,7 +19,7 @@ def generate_launch_description():
     robot_bringup_path = get_package_share_path('my_robot_bringup')
 
     urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
-    rviz_config_path = os.path.join(robot_description_path, 'rviz', 'urdf_config.rviz')
+    rviz_config_path = os.path.join(robot_description_path, 'rviz', 'path_planning.rviz')
     controller_path = os.path.join(robot_bringup_path, 'config', 'my_robot_controller.yaml')
 
     gazebo_config_path = os.path.join(robot_bringup_path, 'config', 'gazebo_bridge.yaml')

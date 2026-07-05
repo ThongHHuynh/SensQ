@@ -3,7 +3,7 @@ import rclpy
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 import tf_transformations
-
+import math
 def create_pose_stamped(navigator : BasicNavigator, position_x, position_y, orientation_z):
     q_x, q_y, q_z, q_w = tf_transformations.quaternion_from_euler(0.0, 0.0, orientation_z)
     pose = PoseStamped()
@@ -31,9 +31,9 @@ def main():
     nav.waitUntilNav2Active()
 
     # --Create goal pose
-    goal_pose = create_pose_stamped(nav,2.5,4.5,0.0)
-    goal_pose1 = create_pose_stamped(nav,-3.0,4.5,0.0)
-    goal_pose2 = create_pose_stamped(nav,-3.0,-5.0,0.0)
+    goal_pose = create_pose_stamped(nav,1.0,0.0,math.radians(90.0))
+    goal_pose1 = create_pose_stamped(nav,1.0,1.0,math.radians(90.0))
+    goal_pose2 = create_pose_stamped(nav,0.0,1.0,math.radians(90.0))
 
 
     # -- Follow waypoints
@@ -43,7 +43,7 @@ def main():
         nav.followWaypoints(waypoints)
         while not nav.isTaskComplete():
             feedback = nav.getFeedback()
-            #print(feedback)
+            print(feedback)
 
 
     

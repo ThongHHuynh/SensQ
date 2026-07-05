@@ -5,5 +5,5 @@ map_processor_node:
 path_generator_node:
   ros__parameters:
     spacing_m: 0.5
-
+    min_segment_length_m: 0.2
 

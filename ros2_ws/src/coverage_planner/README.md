@@ -8,6 +8,7 @@ The robot sweeps every reachable free-space cell while respecting a configurable
 ## Table of Contents
 
 - [Overview](#overview)
+- [Custom Planner Roadmap](#custom-planner-roadmap)
 - [Architecture](#architecture)
 - [Nodes](#nodes)
   - [coverage_node (monolithic)](#coverage_node-monolithic)
@@ -31,9 +32,70 @@ The coverage planner answers the question: *"Given a known map, how do I drive m
 It works in four stages:
 
 1. **Map Processing** – inflate obstacles by the robot's clearance radius to produce a *safe free-space* grid.
-2. **Path Generation** – scan the safe grid row-by-row to build a zigzag (lawnmower) path.
+2. **Path Generation** – decompose the safe grid into boustrophedon cells and sweep each cell.
 3. **Visualization** – publish RViz markers so you can inspect waypoints before sending the robot.
 4. **Execution** – (optional) send the path to Nav2 via `NavigateThroughPoses`.
+
+---
+
+## Custom Planner Roadmap
+
+Goal: replace dependency-heavy coverage planning with a planner we understand, can tune, and can validate before driving the robot.
+
+### Production-grade phases
+
+| Phase | Goal | Done when |
+|---|---|---|
+| 0. Requirements | Define robot width, tool width, clearance, minimum turn radius, map frame, and success metrics | Parameters are documented and tested on one known map |
+| 1. Safe map | Convert `/map` into a binary drivable grid | Walls, unknown cells, and obstacles are inflated by `clearance_m` |
+| 2. Cell decomposition | Split safe space into coverage chunks | Disconnected rooms/regions become separate cells; internal obstacles become holes |
+| 3. Sweep generation | Generate lawnmower passes inside each cell | Sweep spacing equals `coverage_width_m`; no waypoint is inside occupied space |
+| 4. Cell ordering | Choose which cell to cover first/next | The route starts near the robot and visits all cells with reasonable transition distance |
+| 5. Transition planning | Connect cells and sweep rows safely | Transitions are checked against the safe map or requested from Nav2 |
+| 6. Validation | Reject unsafe paths before publishing | Every sampled point is inside safe free space and respects bounds |
+| 7. Execution | Drive the path through Nav2 | Start, pause, cancel, resume, and failure handling work |
+| 8. Metrics | Measure coverage quality | Publishes covered area %, missed cells, path length, and execution result |
+
+### MVP checklist
+
+Build the MVP in this order:
+
+1. Keep `map_processor_node` as the source of `/coverage/safe_map`.
+2. Add a shared `coverage_geometry.py` module with small data classes: `Cell`, `Ring`, `Segment`, `Waypoint`.
+3. Implement `safe_map_to_cells()`:
+   - use OpenCV contour hierarchy;
+   - external contours become cells;
+   - child contours become obstacle holes;
+   - discard tiny cells/holes by area.
+4. Implement `generate_sweeps(cell)`:
+   - start with horizontal sweeps only;
+   - intersect each sweep row with the cell polygon;
+   - subtract obstacle-hole intervals;
+   - create left-to-right/right-to-left segments.
+5. Implement `order_segments()`:
+   - start from the segment closest to the robot pose;
+   - alternate direction for normal lawnmower motion;
+   - jump to nearest unvisited segment only when disconnected.
+6. Implement `connect_segments()`:
+   - first MVP: L-shaped transitions checked against the safe grid;
+   - later: ask Nav2 for transition paths between disconnected cells.
+7. Implement `validate_path()`:
+   - sample every `path_step_m`;
+   - reject if any sample is outside safe free space;
+   - warn when coverage is below target.
+8. Publish:
+   - `/coverage/path` as `nav_msgs/Path`;
+   - `/coverage/waypoint_markers` for RViz;
+   - `/coverage/metrics` later.
+9. Execute only after visualization looks correct.
+
+MVP acceptance criteria:
+
+- Handles one room with internal obstacles.
+- Handles two disconnected free-space regions.
+- Path never crosses occupied/unknown cells in `/coverage/safe_map`.
+- Sweep spacing is predictable from `coverage_width_m`.
+- RViz visualization is readable before execution.
 
 ---
 
@@ -45,6 +107,8 @@ The package ships **two architectures** selectable via launch file:
 |---|---|---|
 | `coverage.launch.py` | **Monolithic** – single node does everything | `coverage_node` |
 | `zigzag.launch.py` | **Modular pipeline** – each stage is a separate node | `map_processor_node` → `path_generator_node` → `coverage_visualizer_node` → `coverage_manager_node` |
+| `open_coverage.launch.py` | **OpenNav polygon bridge** – converts safe map to polygon input | `map_processor_node` → `open_coverage_path` |
+| `f2c.launch.py` | **F2C polygon pipeline** – converts safe map to WKT, then plans with Fields2Cover | `map_processor_node` → `open_coverage_path` → `f2c_path_gen_node` → `coverage_visualizer_node` |
 
 ### Modular pipeline data flow
 
@@ -151,6 +215,10 @@ Subscribes to `/coverage/path`. When `execute_coverage` is `true`, it:
 | `/coverage/safe_map` | `nav_msgs/OccupancyGrid` | Internal | Obstacle-inflated safe free-space map |
 | `/coverage/path` | `nav_msgs/Path` | Internal / Output | Dense lawnmower waypoints |
 | `/coverage/waypoint_markers` | `visualization_msgs/MarkerArray` | Output | RViz debug markers |
+| `/coverage/opennav_boundary` | `geometry_msgs/PolygonStamped` | Output | Largest safe-region polygon for OpenNav coverage |
+| `/coverage/opennav_wkt` | `std_msgs/String` | Output | WKT polygon/multipolygon, including obstacle holes |
+| `/coverage/opennav_polygons` | `visualization_msgs/MarkerArray` | Output | Green boundary and red hole markers |
+| `/coverage/f2c_swaths` | `visualization_msgs/MarkerArray` | Output | F2C coverage swaths without transition connector lines |
 | `/coverage_path` | `nav_msgs/Path` | Output (monolithic) | Path from `coverage_node` |
 | `/coverage_points` | `visualization_msgs/MarkerArray` | Output (monolithic) | Markers from `coverage_node` |
 
@@ -185,6 +253,7 @@ All topics use **QoS: TRANSIENT_LOCAL / RELIABLE** so late-joining subscribers r
 | `map_topic` | string | `/coverage/safe_map` | Safe map input topic |
 | `path_topic` | string | `/coverage/path` | Path output topic |
 | `spacing_m` | double | `0.3` | Row spacing and waypoint interval |
+| `min_segment_length_m` | double | `0.2` | Free-space row intervals shorter than this are discarded |
 
 ### `coverage_manager_node`
 
@@ -203,6 +272,7 @@ map_processor_node:
 path_generator_node:
   ros__parameters:
     spacing_m: 0.5
+    min_segment_length_m: 0.2
 ```
 
 ---
@@ -239,6 +309,16 @@ ros2 launch coverage_planner zigzag.launch.py execute_coverage:=true use_sim_tim
 | `use_sim_time` | `true` |
 | `execute_coverage` | `false` |
 
+### `open_coverage.launch.py` – OpenNav polygon bridge
+
+Converts `/coverage/safe_map` into the polygon form needed by `opennav_coverage`.
+
+```bash
+ros2 launch coverage_planner open_coverage.launch.py
+```
+
+Outputs the largest safe connected region on `/coverage/opennav_boundary`, all safe regions as WKT on `/coverage/opennav_wkt`, and RViz markers on `/coverage/opennav_polygons`.
+
 ---
 
 ## Algorithm – How It Works
@@ -251,35 +331,45 @@ The raw occupancy grid marks cells as **free (0)**, **occupied (100)**, or **unk
 2. Computes an erosion kernel radius: `r = clearance_m / resolution` pixels.
 3. Erodes the free mask with an **elliptical structuring element** using OpenCV – this shrinks free space inward from walls so the robot centre never comes within `clearance_m` of an obstacle.
 
-### 2. Lawnmower path generation
+Coverage debug outputs such as `/coverage/safe_map`, `/coverage/path`, and markers use timestamp `0` so RViz uses the latest TF for static map-style visualization.
 
-The core algorithm uses the `Segment` class to represent contiguous horizontal runs of free pixels at a given row:
+For the F2C launch, obstacle handling depends on `config/f2c.yaml`: increase `clearance_m` for more wall margin, lower `contour_simplification_px` to preserve wall detail, and lower `min_hole_area_m2` if small obstacles are ignored. The F2C node also validates generated path samples against `/coverage/safe_map` before publishing.
+
+F2C can optimize the sweep angle from the extracted polygon by setting `use_best_swath_angle: true`. If coverage misses strips, reduce `coverage_width_m`; if RViz looks too dense, increase `path_step_m`; if turns clip obstacles, increase `clearance_m` or `min_turning_radius_m`.
+
+`f2c.launch.py` runs `open_coverage_path` first, then `f2c_path_gen_node` consumes `/coverage/opennav_wkt`. WKT can contain multiple disconnected safe regions. Set `input_mode: map` in `config/f2c.yaml` only if you want F2C to rebuild polygons directly from `/coverage/safe_map`.
+
+For indoor maps, use `path_output_mode: swaths` to publish straight swath passes and avoid large Dubins oval turns. Use `path_output_mode: dubins` only when continuous curved turns are desired and enough free space exists for them.
+
+For production-style navigation, keep `repair_unsafe_connections: false` and let Nav2 plan between swaths/cells. Visualize `/coverage/f2c_swaths` as `MarkerArray` to see clean coverage lines without RViz path connector diagonals.
+
+### 2. Boustrophedon decomposition and path generation
+
+The modular `path_generator_node` first decomposes the safe grid into cells, then generates lawnmower sweeps per cell. A cell boundary is created when scanline connectivity changes: for example, when one free interval splits into two around an obstacle, or two intervals merge again after the obstacle.
+
+The core algorithm uses:
 
 ```
 Segment(y, x1, x2)   ← a horizontal span from pixel x1 to x2 on row y
+Cell                 ← a group of connected segments between connectivity changes
 ```
 
 **Steps:**
 
-1. **Scan rows** – iterate through the safe free-space image every `spacing_px` rows. For each row, find contiguous runs of free pixels and create `Segment` objects. Discard segments shorter than `min_segment_length_px`.
-2. **Start at the first segment** – sweep left-to-right, placing waypoints every `spacing_px` pixels.
-3. **Move to the next connected row** – look one `spacing_px` row below (or above) for a segment that overlaps horizontally. If found, reverse the sweep direction (right-to-left) and add **L-shaped transition** waypoints (vertical move, then horizontal alignment) to avoid diagonal cuts.
-4. **Reverse vertical direction** – if no connected segment is found below, try above.
-5. **Jump to nearest unvisited segment** – if no connected segment exists in either direction, find the closest unvisited segment (by Euclidean distance) and start a new sweep from there.
-6. **Repeat** until every segment is visited.
+1. **Scan every row** – find contiguous free-space intervals.
+2. **Track overlap with the previous row** – if exactly one previous interval overlaps one current interval, the same cell continues.
+3. **Split/merge at critical rows** – if one interval becomes many, many become one, or topology changes, new cells start.
+4. **Order cells** – visit cells greedily by nearest segment.
+5. **Sweep each cell** – sample rows every `spacing_m`, then alternate left-to-right and right-to-left passes.
+6. **Connect sweeps** – add L-shaped transition waypoints between rows and between cells.
 
 **Waypoint format:** `(x_px, y_px, yaw)` – yaw is `0` for left-to-right, `π` for right-to-left, `±π/2` for vertical transitions.
 
+MVP limitation: transition waypoints are generated geometrically. They should be validated against `/coverage/safe_map` before real robot execution.
+
 ### 3. Coordinate conversion
 
-Pixel coordinates are converted to map frame using:
-
-```
-x_map = origin.x + x_px * resolution
-y_map = origin.y + y_px * resolution
-```
-
-The monolithic `coverage_node` additionally accounts for origin rotation via quaternion-to-yaw conversion.
+Pixel coordinates are converted to map frame using map origin, resolution, and origin yaw.
 
 ### 4. Nav2 execution (optional)
 

@@ -34,6 +34,9 @@ setup(
             'map_processor_node = coverage_planner.map_processor_node:main',
             'path_generator_node = coverage_planner.path_generator_node:main',
             'coverage_visualizer_node = coverage_planner.coverage_visualizer_node:main',
+            'f2c_path_gen_node = coverage_planner.f2c_path_gen:main',
+            'custom_path_gen = coverage_planner.custom_path_gen:main',
+            'open_coverage_path = coverage_planner.open_coverage_path:main',
         ],
     },
 )

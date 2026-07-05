@@ -21,3 +21,4 @@ __pycache__/
 # Editor
 .vscode/
 .idea/
+algorithms/Fields2Cover/build/

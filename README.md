@@ -230,10 +230,29 @@ ros2 launch coverage_planner coverage.launch.py
 ```
 
 Add `/coverage_path` as `Path` and `/coverage_points` as `MarkerArray` in RViz.
+The modular path generator uses grid-based boustrophedon cell decomposition.
+Coverage debug maps/paths use timestamp `0` to avoid stale TF drops in RViz.
 After checking the path, drive it with:
 
 ```bash
 ros2 launch coverage_planner coverage.launch.py execute_coverage:=true
+```
+
+Fields2Cover coverage path:
+
+```bash
+ros2 launch coverage_planner f2c.launch.py
+```
+
+The F2C launch converts all safe-map regions to WKT polygons, then plans with Fields2Cover.
+F2C uses best-angle swath generation by default; tune `coverage_width_m`, `path_step_m`, and `clearance_m` in `f2c.yaml`.
+For indoor coverage, `path_output_mode: swaths` avoids large Dubins oval turns.
+For production-style navigation, keep F2C connection repair off and let Nav2 plan transitions between swaths.
+
+OpenNav coverage polygon bridge:
+
+```bash
+ros2 launch coverage_planner open_coverage.launch.py
 ```
 
 Gazebo Nav2 uses `ros2_ws/maps/simple_maze.yaml` by default. AMCL publishes

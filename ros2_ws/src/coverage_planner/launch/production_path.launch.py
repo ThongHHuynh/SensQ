@@ -59,7 +59,7 @@ def generate_launch_description():
     ]
 
     return LaunchDescription([
-        DeclareLaunchArgument("use_sim_time", default_value="true"),
+        DeclareLaunchArgument("use_sim_time", default_value="false"),
 
         # Map preprocessor (standard node, always runs).
         Node(

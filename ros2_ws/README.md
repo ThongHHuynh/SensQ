@@ -24,3 +24,6 @@ sudo chown -R $USER:$USER ros2_ws
 - It auto-activates lifecycle nodes, logs planning time, rejects unsafe paths, skips unreachable cells, and reports real swept-area progress.
 - Config: `src/coverage_planner/config/production_coverage.yaml`.
 - Run: `ros2 launch coverage_planner production_path.launch.py use_sim_time:=false`
+
+# Nav2 tuning
+- DWB is tuned for faster coverage travel with straight tracking, looser waypoint yaw tolerance, and quicker in-place turns.

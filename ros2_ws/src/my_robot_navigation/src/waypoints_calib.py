@@ -31,9 +31,9 @@ def main():
     nav.waitUntilNav2Active()
 
     # --Create goal pose
-    goal_pose = create_pose_stamped(nav,1.0,0.0,math.radians(90.0))
-    goal_pose1 = create_pose_stamped(nav,1.0,1.0,math.radians(90.0))
-    goal_pose2 = create_pose_stamped(nav,0.0,1.0,math.radians(90.0))
+    goal_pose = create_pose_stamped(nav,0.5,0.0,math.radians(0.0))
+    goal_pose1 = create_pose_stamped(nav,1.0,0.0,math.radians(0.0))
+    goal_pose2 = create_pose_stamped(nav,0.0,0.0,math.radians(0.0))
 
 
     # -- Follow waypoints

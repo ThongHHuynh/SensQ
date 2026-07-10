@@ -7,20 +7,20 @@ production_path_gen:
 
     # sweep geometry
     coverage_width_m: 0.3
-    waypoint_spacing_m: 0.3
+    waypoint_spacing_m: 1.5
     min_segment_length_m: 0.2
-    min_cell_area_m2: 0.2
-    sweep_direction: horizontal          # horizontal, vertical, or auto (picks shorter path)
+    min_cell_area_m2: 0.5
+    sweep_direction: auto          # horizontal, vertical, or auto (picks shorter path)
 
     # transitions
     validation_step_m: 0.05
-    transition_sample_m: 0.2
+    transition_sample_m: 0.35
     use_diagonal_astar: true       # 8-connected vs 4-connected A*
     max_astar_iterations: 50000    # hard cap on A* nodes expanded per transition
 
     # path quality
     reject_unsafe_path: true
-    simplify_tolerance_m: 0.03     # RDP simplification epsilon
+    simplify_tolerance_m: 0.08     # RDP simplification epsilon
     optimize_cell_order: true      # enable 2-opt improvement
 
     # robot
@@ -31,7 +31,7 @@ coverage_visualizer_node:
   ros__parameters:
     map_topic: /coverage/safe_map
     min_segment_length_m: 0.5
-    min_cell_area_m2: 1.0
+    min_cell_area_m2: 0.5
     sweep_direction: auto
     show_cell_labels: true
     cell_label_height_m: 0.25

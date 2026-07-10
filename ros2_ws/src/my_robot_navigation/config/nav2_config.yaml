@@ -39,15 +39,15 @@ amcl:
     z_max: 0.05
     z_rand: 0.5
     z_short: 0.05
-    #ENABLE/DISABLE INITIAL POSE SETTING BASED ON LAUNCH FILE CONFIGURATION
-    set_initial_pose: false
+    #ENABLE initial pose if ekf publish map ->odom
+    set_initial_pose: true
     always_reset_initial_pose: false
     first_map_only: false
-    # initial_pose:
-    #   x: 0.0
-    #   y: 0.0
-    #   z: 0.0
-    #   yaw: 0.0
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      yaw: 0.0
 
 bt_navigator:
   ros__parameters:

@@ -29,7 +29,7 @@ def generate_launch_description():
     controller_path = os.path.join(robot_bringup_path, "config", "my_robot_controller.yaml")
     default_nav2_params_path = os.path.join(robot_navigation_path, "config", "nav2_config.yaml")
     default_rviz_config_path = os.path.join(robot_navigation_path, "rviz", "navigation_config.rviz")
-    ekf_path = os.path.join(robot_bringup_path, "config", "ekf.yaml")
+    ekf_path = os.path.join(robot_navigation_path, "config", "ekf.yaml")
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",

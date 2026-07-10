@@ -39,8 +39,3 @@ f2c_path_gen_node:
 
 coverage_visualizer_node:
   ros__parameters: {}
-
-coverage_manager_node:
-  ros__parameters:
-    path_topic: /coverage/path
-    execute_coverage: false

@@ -20,8 +20,8 @@ setup(
     zip_safe=True,
     maintainer='tom',
     maintainer_email='thonghuynh.0203@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Coverage path planning for mobile robots using Boustrophedon cell decomposition',
+    license='Proprietary',
     extras_require={
         'test': [
             'pytest',
@@ -29,14 +29,12 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'coverage_node = coverage_planner.coverage_node:main',
-            'coverage_manager_node = coverage_planner.coverage_manager_node:main',
             'map_processor_node = coverage_planner.map_processor_node:main',
-            'path_generator_node = coverage_planner.path_generator_node:main',
             'coverage_visualizer_node = coverage_planner.coverage_visualizer_node:main',
             'f2c_path_gen_node = coverage_planner.f2c_path_gen:main',
-            'custom_path_gen = coverage_planner.custom_path_gen:main',
             'open_coverage_path = coverage_planner.open_coverage_path:main',
+            'production_path_gen = coverage_planner.production_path_gen:main',
+            'coverage_executor_node = coverage_planner.coverage_executor_node:main',
         ],
     },
 )

@@ -34,6 +34,7 @@ def main():
 
     # --Create goal pose
     goal_pose = create_pose_stamped(nav,1.0,0.0,math.radians(90.0))
+    
 
     #-- Sending goal pose
     nav.goToPose(goal_pose)

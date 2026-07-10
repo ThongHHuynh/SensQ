@@ -18,13 +18,6 @@ def generate_launch_description():
         DeclareLaunchArgument("execute_coverage", default_value="false"),
         Node(
             package="coverage_planner",
-            executable="coverage_manager_node",
-            name="coverage_manager_node",
-            output="screen",
-            parameters=[config_file, {"use_sim_time": use_sim_time, "execute_coverage": execute_coverage}],
-        ),
-        Node(
-            package="coverage_planner",
             executable="map_processor_node",
             name="map_processor_node",
             output="screen",

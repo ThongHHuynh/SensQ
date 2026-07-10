@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#USE TO CONVERT SAFE MAP TO OPENNAV POLYGON
 
 import math
 

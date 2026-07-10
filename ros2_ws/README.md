@@ -26,4 +26,4 @@ sudo chown -R $USER:$USER ros2_ws
 - Run: `ros2 launch coverage_planner production_path.launch.py use_sim_time:=false`
 
 # Nav2 tuning
-- DWB is tuned for faster coverage travel with straight tracking, looser waypoint yaw tolerance, and quicker in-place turns.
+- DWB is tuned for faster coverage travel with straight tracking, no waypoint wait, and quick in-place turns.

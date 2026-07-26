@@ -1,0 +1,45 @@
+coverage_planner:
+  ros__parameters:
+    map_topic: /map
+    path_topic: /test_coverage/path
+    marker_topic: /test_coverage/markers
+    segment_topic: /test_coverage/segment_starts
+    status_topic: /test_coverage/planning_status
+    map_frame: map
+    robot_base_frame: base_footprint
+    operation_width_m: 0.25
+    overlap_m: 0.03
+    robot_radius_m: 0.10
+    safety_margin_m: 0.05
+    headland_depth_m: 0.20
+    headland_overlap_m: 0.05
+    min_turning_radius_m: 0.16
+    path_spacing_m: 0.025
+    min_lane_length_m: 0.20
+    min_cell_area_m2: 0.05
+    occupied_threshold: 65
+    unknown_is_obstacle: true
+    sweep_mode: auto
+    turn_mode: auto
+    max_astar_iterations: 100000
+    optimize_cell_order: true
+    auto_generate: false
+
+coverage_executor:
+  ros__parameters:
+    path_topic: /test_coverage/path
+    segment_topic: /test_coverage/segment_starts
+    status_topic: /test_coverage/execution_status
+    map_frame: map
+    robot_base_frame: base_footprint
+    navigate_action: /navigate_to_pose
+    follow_action: /follow_path
+    controller_id: CoveragePath
+    goal_checker_id: general_goal_checker
+    entry_tolerance_m: 0.60
+    action_server_timeout_s: 10.0
+    progress_timeout_s: 60.0
+    max_follow_retries: 2
+    resume_search_window_m: 1.0
+    retry_overlap_m: 0.30
+    auto_start: false

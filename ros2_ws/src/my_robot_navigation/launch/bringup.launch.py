@@ -99,13 +99,6 @@ def generate_launch_description():
         ],
         output="screen",
     )
-    ekf_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
-        output='screen',
-        parameters=[ekf_path]
-    )
 
     delayed_joint_state_broadcaster = TimerAction(
         period=4.0,
@@ -126,7 +119,25 @@ def generate_launch_description():
             "serial_baudrate": lidar_serial_baudrate,
         }.items(),
     )
+    imu_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(get_package_share_directory("tm_imu"), "launch", "imu.launch.py")
+        )
+    )
+#EKF    
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        output='screen',
+        parameters=[ekf_path]
+    )
 
+    delayed_ekf = TimerAction(
+        period=3.0,
+        actions=[ekf_node],
+    )
+#NAVIGATION
     nav2_bringup = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(get_package_share_directory("nav2_bringup"), "launch", "bringup_launch.py")
@@ -202,8 +213,9 @@ def generate_launch_description():
             controller_node,
             delayed_joint_state_broadcaster,
             start_diff_drive_after_joint_state_broadcaster,
-            ekf_node,
             lidar_launch,
+            imu_launch,
+            delayed_ekf,
             delayed_nav2,
             rviz2_node,
         ]

@@ -1,8 +1,9 @@
 from launch import LaunchDescription
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
-from launch.actions import IncludeLaunchDescription, TimerAction
-from launch.substitutions import Command
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.conditions import IfCondition, UnlessCondition
+from launch.substitutions import Command, LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 import os
 from ament_index_python.packages import get_package_share_path, get_package_share_directory
@@ -14,6 +15,8 @@ def generate_launch_description():
     port = "/dev/ttyUSB0"
     # Gazebo launch should not talk to real hardware even if a serial device exists.
     use_mock = True
+    headless = LaunchConfiguration('headless')
+    use_rviz = LaunchConfiguration('use_rviz')
 
     robot_description_path = get_package_share_path('my_robot_description')
     robot_bringup_path = get_package_share_path('my_robot_bringup')
@@ -29,6 +32,9 @@ def generate_launch_description():
 
     #slam_toolbox_path = os.path.join(robot_bringup_path, 'config', 'slam_toolbox.yaml')
     nav2_params = os.path.join(robot_navigation_path, 'config', 'nav2_config.yaml')
+    simulation_ekf_path = os.path.join(
+        robot_navigation_path, 'config', 'simulation-ekf.yaml'
+    )
     robot_description = ParameterValue(Command(['xacro ', urdf_path,' ',
                                                 'use_mock_hardware:=', 'true' if use_mock else 'false', ' ',
                                                 'serial_port:=', port,' ',
@@ -47,9 +53,10 @@ def generate_launch_description():
         executable='rviz2',
         arguments=['-d',rviz_config_path],
         parameters=[{'use_sim_time': True}],
+        condition=IfCondition(use_rviz),
     )
     
-    gz_sim = IncludeLaunchDescription(
+    gz_sim_gui = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             [
                 os.path.join(
@@ -60,6 +67,20 @@ def generate_launch_description():
             ]
         ),
         launch_arguments={"gz_args": [" -r -v 4 ", world_path]}.items(),
+        condition=UnlessCondition(headless),
+    )
+    gz_sim_headless = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                os.path.join(
+                    get_package_share_directory("ros_gz_sim"),
+                    "launch",
+                    "gz_sim.launch.py",
+                )
+            ]
+        ),
+        launch_arguments={"gz_args": [" -s -r -v 4 ", world_path]}.items(),
+        condition=IfCondition(headless),
     )
     # Spawn the robot in Gazebo
     spawn_entity = Node(
@@ -82,7 +103,23 @@ def generate_launch_description():
     ros_gz_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
-        parameters=[{'config_file': gazebo_config_path}]
+        parameters=[{'config_file': gazebo_config_path}],
+        # The EKF is the sole odom -> base_footprint TF publisher.
+        remappings=[('/tf', '/gazebo/raw_tf')],
+        output='screen',
+    )
+
+    ekf_node = Node(
+        package='robot_localization',
+        executable='ekf_node',
+        name='ekf_filter_node',
+        parameters=[simulation_ekf_path],
+        output='screen',
+    )
+
+    delayed_ekf = TimerAction(
+        period=2.0,
+        actions=[ekf_node],
     )
 
     nav2_dir = IncludeLaunchDescription(
@@ -112,15 +149,27 @@ def generate_launch_description():
 
 
     ld = LaunchDescription()
+    ld.add_action(
+        DeclareLaunchArgument(
+            'headless',
+            default_value='false',
+            description='Run the Gazebo server without its GUI.',
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'use_rviz',
+            default_value='true',
+            description='Start RViz.',
+        )
+    )
     ld.add_action(robot_state_publisher_node)
-    # ld.add_action(controller_node)
-    # ld.add_action(joint_state_broadcaster)
-    # ld.add_action(diff_drive)
-    # ld.add_action(joint_state_publisher_gui_node)
     ld.add_action(rviz2_node)
-    ld.add_action(gz_sim)
+    ld.add_action(gz_sim_gui)
+    ld.add_action(gz_sim_headless)
     ld.add_action(spawn_entity)
     ld.add_action(ros_gz_bridge)
+    ld.add_action(delayed_ekf)
     ld.add_action(delayed_nav2)
 
     return ld

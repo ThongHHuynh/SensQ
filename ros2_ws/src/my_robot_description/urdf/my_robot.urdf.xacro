@@ -6,7 +6,6 @@
     <xacro:arg name="baud" default="115200"/>
 
     <xacro:include filename="common_properties.xacro" />
-    <!-- <xacro:include filename="mobile_base.xacro" /> -->
     <xacro:include filename="mobile_base.urdf.xacro" />
     <xacro:include filename="mobile_base.ros2_control.xacro"/>
     <xacro:include filename="mobile_base.gazebo.xacro"/>
@@ -16,5 +15,4 @@
         baud="$(arg baud)" />
     <xacro:include filename="lidar.urdf.xacro" />
     <xacro:include filename="imu.urdf.xacro" />
-
 </robot>

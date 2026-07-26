@@ -198,13 +198,13 @@ Visualization Manager:
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
-      Color: 25; 255; 0
+      Color: 229; 165; 10
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
+      Line Style: Billboards
+      Line Width: 0.10000000149011612
       Name: Path
       Offset:
         X: 0
@@ -255,8 +255,7 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        cell_labels: true
-        cells: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -291,6 +290,50 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /coverage/path
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 20; 255; 70
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.03999999910593033
+      Name: Test Coverage Planned Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /test_coverage/path
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Test Coverage Cells and Turns
+      Namespaces:
+        coverage_cell_labels: true
+        coverage_cells: true
+        coverage_end: true
+        coverage_path: true
+        coverage_start: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /test_coverage/markers
       Value: true
   Enabled: true
   Global Options:
@@ -338,16 +381,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 4.780179023742676
+      Distance: 2.283390998840332
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.30314546823501587
-        Y: -1.8662103414535522
-        Z: 0.21580758690834045
+        X: 1.636391520500183
+        Y: 0.33497971296310425
+        Z: 0.5951868295669556
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false

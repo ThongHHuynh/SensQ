@@ -1,0 +1,244 @@
+from dataclasses import dataclass
+import math
+from pathlib import Path
+from typing import Dict, Sequence
+
+import yaml
+
+
+class DockDatabaseError(ValueError):
+    """Raised when the dock database is invalid."""
+
+@dataclass(frozen=True)
+class DockDefinition:
+    """A dataclass to hold the definition of a docking station."""
+    dock_id: str
+    tag_id: int
+    tag_frame: str
+    global_frame: str
+
+    reference_x: float
+    reference_y: float
+    reference_yaw: float
+
+    staging_x: float
+    staging_y: float
+    staging_yaw: float
+
+    final_distance: float
+    lateral_offset: float
+    yaw_offset: float
+
+    reverse_docking: bool
+
+
+class DockDatabase:
+    """Loads and validates docking station definitions from a YAML file."""
+
+    SUPPORTED_SCHEMA_VERSION = 1
+
+    def __init__(self, database_path):
+        self._path = Path(database_path)
+        self._docks: Dict[str, DockDefinition] = {}
+        self._load()
+
+    def _load(self):
+        if not self._path.is_file():
+            raise DockDatabaseError(
+                f'Dock database does not exist: {self._path}'
+            )
+
+        try:
+            with self._path.open('r', encoding='utf-8') as file:
+                data = yaml.safe_load(file)
+        except OSError as error:
+            raise DockDatabaseError(
+                f'Could not read dock database {self._path}: {error}'
+            ) from error
+        except yaml.YAMLError as error:
+            raise DockDatabaseError(
+                f'Invalid YAML in dock database in {self._path}: {error}'
+            ) from error
+
+        if not isinstance(data, dict):
+            raise DockDatabaseError(
+                'Dock database must be a dictionary'
+            )
+
+        version = data.get('schema_version')
+        if version != self.SUPPORTED_SCHEMA_VERSION:
+            raise DockDatabaseError(
+                f'Unsupported schema version {version}. '
+                f'Supported version is {self.SUPPORTED_SCHEMA_VERSION}'
+            )
+
+        raw_docks = data.get('docks')
+        if not isinstance(raw_docks, dict) or not raw_docks:
+            raise DockDatabaseError(
+                'The docks field must contain at least one dock definition'
+            )
+
+        used_tag_ids = set()
+
+        for dock_id, raw_dock in raw_docks.items():
+            definition = self._parse_dock(dock_id, raw_dock)
+
+            if definition.tag_id in used_tag_ids:
+                raise DockDatabaseError(
+                    f'Dock {dock_id} has a duplicate tag_id: {definition.tag_id}'
+                )
+            used_tag_ids.add(definition.tag_id)
+            self._docks[dock_id] = definition
+
+
+    def _parse_dock(self, dock_id: str, raw_dock: dict) -> DockDefinition:
+        if not isinstance(raw_dock, dict):
+            raise DockDatabaseError(
+                f'Dock {dock_id} must be a dictionary'
+            )
+
+        required_fields = (
+            'tag_id',
+            'tag_frame',
+            'global_frame',
+            'reference_pose',
+            'staging_pose',
+            'final_distance',
+            'lateral_offset',
+            'yaw_offset',
+            'reverse_docking',
+        )
+
+        for field in required_fields:
+            if field not in raw_dock:
+                raise DockDatabaseError(
+                    f'Dock {dock_id} is missing required field: {field}'
+                )
+        tag_id = raw_dock['tag_id']
+
+        if isinstance(tag_id, bool) or not isinstance(tag_id, int):
+            raise DockDatabaseError(
+                f'Dock {dock_id!r} tag_id must be an integer'
+            )
+        
+        reference = self._parse_pose(
+            dock_id,
+            'reference_pose',
+            raw_dock['reference_pose'],
+        )
+        staging = self._parse_pose(
+            dock_id,
+            'staging_pose',
+            raw_dock['staging_pose'],
+        )
+        final_distance = self._number(
+            dock_id,
+            'final_distance',
+            raw_dock['final_distance'],
+        )
+        lateral_offset = self._number(
+            dock_id,
+            'lateral_offset',
+            raw_dock['lateral_offset'],
+        )
+        yaw_offset = self._number(
+            dock_id,
+            'yaw_offset',
+            raw_dock['yaw_offset'],
+        )
+
+        if final_distance <= 0:
+            raise DockDatabaseError(
+                f'Dock {dock_id} final_distance must be positive'
+            )
+        reverse_docking = raw_dock['reverse_docking']
+        if not isinstance(reverse_docking, bool):
+            raise DockDatabaseError(
+                f'Dock {dock_id} reverse_docking must be a boolean'
+            )
+        return DockDefinition(
+            dock_id=str(dock_id),
+            tag_id=tag_id,
+            tag_frame=self._string(
+                dock_id,
+                'tag_frame',
+                raw_dock['tag_frame'],
+            ),
+            global_frame=self._string(
+                dock_id,
+                'global_frame',
+                raw_dock['global_frame'],
+            ),
+            reference_x=reference[0],
+            reference_y=reference[1],
+            reference_yaw=reference[2],
+            staging_x=staging[0],
+            staging_y=staging[1],
+            staging_yaw=staging[2],
+            final_distance=final_distance,
+            lateral_offset=lateral_offset,
+            yaw_offset=yaw_offset,
+            reverse_docking=reverse_docking,
+        )
+
+    def get(self, dock_id: str) -> DockDefinition:
+        """Return one dock by its configured ID."""
+
+        try:
+            return self._docks[dock_id]
+        except KeyError as error:
+            available = ', '.join(sorted(self._docks))
+
+            raise DockDatabaseError(
+                f'Unknown dock {dock_id!r}; available docks: {available}'
+            ) from error
+
+
+    def ids(self):
+        """Return all configured dock IDs."""
+
+        return tuple(sorted(self._docks))
+
+    @classmethod
+    def _parse_pose(
+        cls,
+        dock_id: str,
+        field: str,
+        value: Sequence,
+    ):
+        if (
+            not isinstance(value, (list, tuple))
+            or len(value) != 3
+        ):
+            raise DockDatabaseError(
+                f'Dock {dock_id!r} {field} must be [x, y, yaw]'
+            )
+
+        return tuple(
+            cls._number(dock_id, f'{field}[{index}]', item)
+            for index, item in enumerate(value)
+        )
+    
+    @staticmethod
+    def _number(dock_id, field, value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise DockDatabaseError(
+                f'Dock {dock_id!r} {field} must be numeric'
+            )
+
+        number = float(value)
+        if not math.isfinite(number):
+            raise DockDatabaseError(
+                f'Dock {dock_id!r} {field} must be finite'
+            )
+        return number
+
+    @staticmethod
+    def _string(dock_id, field, value):
+        if not isinstance(value, str) or not value.strip():
+            raise DockDatabaseError(
+                f'Dock {dock_id!r} {field} must be a non-empty string'
+            )
+
+        return value
+    

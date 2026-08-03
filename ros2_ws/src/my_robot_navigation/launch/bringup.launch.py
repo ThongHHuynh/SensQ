@@ -19,11 +19,13 @@ def generate_launch_description():
     map_yaml = LaunchConfiguration("map")
     params_file = LaunchConfiguration("params_file")
     use_rviz = LaunchConfiguration("use_rviz")
+    start_camera = LaunchConfiguration("start_camera")
     rviz_config = LaunchConfiguration("rviz_config")
 
     robot_description_path = get_package_share_path("my_robot_description")
     robot_bringup_path = get_package_share_path("my_robot_bringup")
     robot_navigation_path = get_package_share_path("my_robot_navigation")
+    docking_path = get_package_share_path("my_robot_docking")
 
     urdf_path = os.path.join(robot_description_path, "urdf", "my_robot.urdf.xacro")
     controller_path = os.path.join(robot_bringup_path, "config", "my_robot_controller.yaml")
@@ -69,7 +71,7 @@ def generate_launch_description():
         parameters=[controller_path],
         remappings=[
             ("/controller_manager/robot_description", "/robot_description"),
-            ("/diff_drive_controller/cmd_vel_unstamped", "/cmd_vel"),
+            ("/diff_drive_controller/cmd_vel_unstamped", "/cmd_vel_out"),
         ],
         output="screen",
     )
@@ -124,6 +126,25 @@ def generate_launch_description():
             os.path.join(get_package_share_directory("tm_imu"), "launch", "imu.launch.py")
         )
     )
+    camera_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory("realsense2_camera"),
+                "launch",
+                "rs_launch.py",
+            )
+        ),
+        launch_arguments={
+            "camera_namespace": "",
+            "camera_name": "camera",
+            "device_type": "d435",
+            "enable_color": "true",
+            "enable_depth": "true",
+            "pointcloud.enable": "false",
+            "publish_tf": "true",
+        }.items(),
+        condition=IfCondition(start_camera),
+    )
 #EKF    
     ekf_node = Node(
         package='robot_localization',
@@ -156,6 +177,16 @@ def generate_launch_description():
     delayed_nav2 = TimerAction(
         period=2.0,
         actions=[nav2_bringup],
+    )
+
+    docking = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(docking_path, "launch", "docking.launch.py")
+        ),
+        launch_arguments={
+            "use_sim_time": "false",
+            "start_apriltag": "true",
+        }.items(),
     )
 
     rviz2_node = Node(
@@ -205,6 +236,11 @@ def generate_launch_description():
                 description="Start RViz with the robot description config.",
             ),
             DeclareLaunchArgument(
+                "start_camera",
+                default_value="True",
+                description="Start the physical Intel RealSense D435 driver.",
+            ),
+            DeclareLaunchArgument(
                 "rviz_config",
                 default_value=default_rviz_config_path,
                 description="RViz config path.",
@@ -215,8 +251,10 @@ def generate_launch_description():
             start_diff_drive_after_joint_state_broadcaster,
             lidar_launch,
             imu_launch,
+            camera_launch,
             delayed_ekf,
             delayed_nav2,
+            docking,
             rviz2_node,
         ]
     )

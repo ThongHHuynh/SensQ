@@ -1,0 +1,84 @@
+docking_server:
+  ros__parameters:
+    # Frames
+    base_frame: base_footprint
+
+    # ROS interfaces
+    dock_action: /dock
+    navigate_to_pose_action: /navigate_to_pose
+    detections_topic: /detections
+    odom_topic: /odometry/filtered
+    scan_topic: /scan
+    cmd_vel_topic: /cmd_vel_dock
+
+    # Runtime
+    use_sim_time: true
+    control_rate: 20.0
+    max_retries: 3
+    return_to_staging_on_retry: false
+
+    # Timeouts
+    transform_timeout: 0.05
+    tag_timeout: 0.50
+    tag_loss_grace_period: 0.75
+    tag_search_timeout: 15.0
+    navigation_timeout: 120.0
+    staging_acceptance_distance: 0.20
+    navigation_feedback_rate: 5.0
+    approach_timeout: 30.0
+    verification_duration: 0.30
+
+    # Search
+    search_angular_speed: 0.20
+    search_angle_limit: 1.57
+
+    # Controller limits
+    max_linear_speed: 0.10
+    max_angular_speed: 0.40
+    max_linear_acceleration: 0.20
+    max_angular_acceleration: 0.80
+
+    # Controller gains
+    distance_kp: 0.40
+    heading_kp: 1.20
+    lateral_kp: 0.80
+    yaw_kp: 0.60
+
+    # State transitions
+    coarse_approach_distance: 0.70
+    rotate_in_place_threshold: 0.35
+
+    # Final-pose tolerances
+    distance_tolerance: 0.03
+    lateral_tolerance: 0.03
+    yaw_tolerance: 0.08
+
+    # Safety
+    minimum_tag_distance: 0.10
+    front_stop_distance: 0.18
+    front_sector_half_angle: 0.35
+    rear_stop_distance: 0.18
+    rear_sector_half_angle: 0.35
+    # lidar_link is mounted pi radians from base_footprint: pi=front, 0=rear.
+    scan_forward_angle: 3.14159
+    # Bounds the odometry-guided portion after the front camera loses the tag.
+    max_reverse_distance: 1.00
+    sensor_timeout: 0.50
+    command_timeout: 0.25
+    stop_on_tag_loss: true
+    require_fresh_odometry: true
+    require_fresh_scan: true
+    tag_normal_sign: -1.0
+
+    # The launch file should override this with the installed database path.
+    dock_database_file: ""
+
+velocity_arbiter:
+  ros__parameters:
+    use_sim_time: true
+    nav_input_topic: /cmd_vel
+    dock_input_topic: /cmd_vel_dock
+    output_topic: /cmd_vel_out
+    nav_timeout: 0.50
+    dock_timeout: 0.25
+    publish_rate: 50.0

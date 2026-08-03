@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <!-- Simulated Intel RealSense D435-style RGB-D camera. Robot forward is +X. -->
+    <link name="camera_link">
+        <inertial>
+            <mass value="0.072"/>
+            <inertia
+                ixx="5.235e-05" ixy="0" ixz="0"
+                iyy="7.5e-06" iyz="0"
+                izz="5.235e-05"/>
+        </inertial>
+
+        <visual>
+            <geometry>
+                <box size="0.025 0.09 0.025"/>
+            </geometry>
+            <material name="realsense_black">
+                <color rgba="0.04 0.04 0.04 1"/>
+            </material>
+        </visual>
+
+        <!-- Front face and lenses make the camera easy to identify in Gazebo. -->
+        <visual>
+            <origin xyz="0.0126 0 0"/>
+            <geometry>
+                <box size="0.001 0.078 0.018"/>
+            </geometry>
+            <material name="realsense_front">
+                <color rgba="0.12 0.12 0.12 1"/>
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0.0135 0.027 0" rpy="0 1.57079632679 0"/>
+            <geometry>
+                <cylinder radius="0.006" length="0.002"/>
+            </geometry>
+            <material name="realsense_lens">
+                <color rgba="0.02 0.08 0.16 1"/>
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0.0135 -0.027 0" rpy="0 1.57079632679 0"/>
+            <geometry>
+                <cylinder radius="0.006" length="0.002"/>
+            </geometry>
+            <material name="realsense_lens"/>
+        </visual>
+
+        <collision>
+            <geometry>
+                <box size="0.025 0.09 0.025"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="camera_link"/>
+        <!-- Keep the existing camera mounting position. -->
+        <origin xyz="0.15 0 0.10" rpy="0 0 0"/>
+    </joint>
+
+    <!-- ROS optical convention: +Z forward, +X right, +Y down. -->
+    <link name="camera_optical_frame"/>
+    <joint name="camera_optical_joint" type="fixed">
+        <parent link="camera_link"/>
+        <child link="camera_optical_frame"/>
+        <origin xyz="0.0125 0 0" rpy="-1.57079632679 0 -1.57079632679"/>
+        <!-- <origin xyz="0.0125 0 0" rpy="0 0 0"/> -->
+    </joint>
+
+    <gazebo reference="camera_joint">
+        <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+
+    <gazebo reference="camera_link">
+        <sensor name="realsense_d435" type="rgbd_camera">
+            <pose>0.0125 0 0 0 0 0</pose>
+            <topic>camera</topic>
+            <always_on>1</always_on>
+            <update_rate>20</update_rate>
+            <visualize>true</visualize>
+            <camera>
+                <horizontal_fov>1.3962634</horizontal_fov>
+                <image>
+                    <width>640</width>
+                    <height>480</height>
+                    <format>R8G8B8</format>
+                </image>
+                <clip>
+                    <near>0.05</near>
+                    <far>20.0</far>
+                </clip>
+                <noise>
+                    <type>gaussian</type>
+                    <mean>0.0</mean>
+                    <stddev>0.007</stddev>
+                </noise>
+                <depth_camera>
+                    <clip>
+                        <near>0.10</near>
+                        <far>10.0</far>
+                    </clip>
+                </depth_camera>
+                <optical_frame_id>camera_optical_frame</optical_frame_id>
+                <camera_info_topic>camera/camera_info</camera_info_topic>
+            </camera>
+        </sensor>
+    </gazebo>
+</robot>

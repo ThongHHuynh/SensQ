@@ -1,7 +1,13 @@
 from launch import LaunchDescription
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    LogInfo,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -15,20 +21,34 @@ def generate_launch_description():
     port = "/dev/ttyUSB0"
     # Gazebo launch should not talk to real hardware even if a serial device exists.
     use_mock = True
+
+    # Isolate this run so a stale Gazebo server cannot receive its spawn request.
+    gazebo_partition = f"my_robot_{os.getpid()}"
     headless = LaunchConfiguration('headless')
     use_rviz = LaunchConfiguration('use_rviz')
 
     robot_description_path = get_package_share_path('my_robot_description')
     robot_bringup_path = get_package_share_path('my_robot_bringup')
     robot_navigation_path = get_package_share_path('my_robot_navigation')
+    docking_path = get_package_share_path('my_robot_docking')
 
     urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
     rviz_config_path = os.path.join(robot_navigation_path, 'rviz', 'navigation_config.rviz')
     controller_path = os.path.join(robot_bringup_path, 'config', 'my_robot_controller.yaml')
 
     gazebo_config_path = os.path.join(robot_bringup_path, 'config', 'gazebo_bridge.yaml')
-    world_path = os.path.join(robot_description_path, 'worlds', 'maze.sdf')
+    world_path = os.path.join(robot_description_path, 'worlds', 'maze_apriltags.sdf')
     nav_map_path = '/home/tom/maps/simple_maze.yaml'
+
+    # Gazebo converts package:// mesh URIs to model:// URIs. Both the legacy
+    # Ignition and current Gazebo variable must contain the parent directory
+    # of the package share directory for those URIs to resolve.
+    gazebo_resource_entries = [str(robot_description_path.parent)]
+    for variable in ('GZ_SIM_RESOURCE_PATH', 'IGN_GAZEBO_RESOURCE_PATH'):
+        for entry in os.environ.get(variable, '').split(os.pathsep):
+            if entry and entry not in gazebo_resource_entries:
+                gazebo_resource_entries.append(entry)
+    gazebo_resource_path = os.pathsep.join(gazebo_resource_entries)
 
     #slam_toolbox_path = os.path.join(robot_bringup_path, 'config', 'slam_toolbox.yaml')
     nav2_params = os.path.join(robot_navigation_path, 'config', 'nav2_config.yaml')
@@ -100,13 +120,31 @@ def generate_launch_description():
         ],
         output="screen",
     )
+    delayed_spawn_entity = TimerAction(
+        period=1.0,
+        actions=[spawn_entity],
+    )
     ros_gz_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
         parameters=[{'config_file': gazebo_config_path}],
         # The EKF is the sole odom -> base_footprint TF publisher.
-        remappings=[('/tf', '/gazebo/raw_tf')],
+        remappings=[
+            ('/tf', '/gazebo/raw_tf'),
+            ('/cmd_vel', '/cmd_vel_out'),
+        ],
         output='screen',
+    )
+
+    docking = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(docking_path, 'launch', 'docking.launch.py')
+        ),
+        launch_arguments={
+            'use_sim_time': 'true',
+            'start_apriltag': 'true',
+            'detector_qos': 'system_default',
+        }.items(),
     )
 
     ekf_node = Node(
@@ -150,6 +188,14 @@ def generate_launch_description():
 
     ld = LaunchDescription()
     ld.add_action(
+        SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", gazebo_resource_path)
+    )
+    ld.add_action(
+        SetEnvironmentVariable("IGN_GAZEBO_RESOURCE_PATH", gazebo_resource_path)
+    )
+    ld.add_action(SetEnvironmentVariable("IGN_PARTITION", gazebo_partition))
+    ld.add_action(LogInfo(msg=f"Gazebo transport partition: {gazebo_partition}"))
+    ld.add_action(
         DeclareLaunchArgument(
             'headless',
             default_value='false',
@@ -167,8 +213,9 @@ def generate_launch_description():
     ld.add_action(rviz2_node)
     ld.add_action(gz_sim_gui)
     ld.add_action(gz_sim_headless)
-    ld.add_action(spawn_entity)
+    ld.add_action(delayed_spawn_entity)
     ld.add_action(ros_gz_bridge)
+    ld.add_action(docking)
     ld.add_action(delayed_ekf)
     ld.add_action(delayed_nav2)
 

@@ -1,0 +1,37 @@
+# Goal
+string dock_id
+bool navigate_to_staging_pose
+bool use_offset_override
+float32 final_distance
+float32 lateral_offset
+float32 yaw_offset
+---
+# Result
+uint16 NONE=0
+uint16 UNKNOWN_DOCK=1
+uint16 NAVIGATION_FAILED=2
+uint16 TAG_NOT_FOUND=3
+uint16 TAG_LOST=4
+uint16 CONTROL_FAILED=5
+uint16 SAFETY_STOP=6
+uint16 VERIFY_FAILED=7
+uint16 CANCELLED=8
+
+bool success
+uint16 error_code
+string message
+---
+# Feedback
+uint8 IDLE=0
+uint8 NAVIGATING=1
+uint8 SEARCHING=2
+uint8 APPROACHING=3
+uint8 ALIGNING=4
+uint8 VERIFYING=5
+uint8 RETRYING=6
+
+uint8 state
+float32 distance_remaining
+float32 lateral_error
+float32 yaw_error
+uint16 retry_count

@@ -15,4 +15,5 @@
         baud="$(arg baud)" />
     <xacro:include filename="lidar.urdf.xacro" />
     <xacro:include filename="imu.urdf.xacro" />
+    <xacro:include filename="camera.urdf.xacro"/>
 </robot>

@@ -8,8 +8,12 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 
+ament_environment_hooks(
+  "${CMAKE_CURRENT_SOURCE_DIR}/env-hooks/gazebo_resource_path.dsv"
+)
+
 install(
-  DIRECTORY urdf launch rviz meshes worlds
+  DIRECTORY urdf launch rviz meshes models worlds
   DESTINATION share/${PROJECT_NAME}/
 )
 

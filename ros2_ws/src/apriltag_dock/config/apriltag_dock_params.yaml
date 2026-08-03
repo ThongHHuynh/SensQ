@@ -1,0 +1,66 @@
+# ============================================================================
+# AprilTag Dock — Parameter Configuration
+# ============================================================================
+# Tuned for a small diff-drive robot with a 640×480 RealSense D435 camera
+# and 200 mm tag36h11 AprilTag markers.
+#
+# The camera protrudes 0.15 m ahead of base_link, so dock_distance and
+# min_safe_distance account for this to prevent wall collisions.
+# ============================================================================
+
+# ── apriltag_ros detection node ────────────────────────────────────────
+apriltag_node:
+  ros__parameters:
+    image_transport: raw
+    family: 36h11
+    size: 0.20              # tag edge size in metres (200 mm markers)
+    max_hamming: 0
+    qos_profile: sensor_data
+
+    detector:
+      threads: 2
+      decimate: 2.0
+      blur: 0.0
+      refine: true
+      sharpening: 0.25
+      debug: false
+
+    # Tag-specific configuration
+    tag:
+      ids: [0, 1]
+      frames: [tag_0, tag_1]
+      sizes: [0.20, 0.20]
+
+# ── Custom dock controller ─────────────────────────────────────────────
+dock_controller_node:
+  ros__parameters:
+    # ── Target ─────────────────────────────────────────────────────────
+    target_tag_id: 0         # which tag ID to dock to
+
+    # ── Docking geometry ───────────────────────────────────────────────
+    # dock_distance: base_footprint stays this far from the tag.
+    #   Camera is 0.15 m ahead of base_link, so 0.35 m leaves ~0.20 m
+    #   clearance between the camera and the wall.
+    dock_distance: 0.35
+    # min_safe_distance: emergency stop if closer than this (hard limit)
+    min_safe_distance: 0.25
+    dock_frame: 'base_footprint'
+
+    # ── Speeds ─────────────────────────────────────────────────────────
+    approach_speed: 0.10     # max forward speed during approach (m/s)
+    search_angular_speed: 0.3  # rotation speed while searching (rad/s)
+
+    # ── Proportional gains ─────────────────────────────────────────────
+    lateral_kp: 0.8          # steering correction gain
+    approach_kp: 0.4         # forward speed gain (deceleration ramp)
+
+    # ── Tolerances ─────────────────────────────────────────────────────
+    alignment_tolerance_m: 0.02    # lateral centering tolerance (m)
+    alignment_tolerance_yaw: 0.05  # yaw alignment tolerance (rad)
+
+    # ── Transition distances ───────────────────────────────────────────
+    align_transition_distance: 0.50  # switch to fine alignment at this range
+
+    # ── Timing ─────────────────────────────────────────────────────────
+    control_rate: 20.0       # control loop frequency (Hz)
+    tag_lost_timeout: 3.0    # seconds before returning to SEARCHING

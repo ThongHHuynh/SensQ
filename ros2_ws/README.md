@@ -86,6 +86,39 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 # Simulation IMU
 - `navigation.launch.py` fuses `/imu` and wheel odometry using `simulation-ekf.yaml`.
 - Use `headless:=true use_rviz:=false` for GUI-free simulation.
+- The maze SDF resolves `maze.dae` from its installed `worlds` directory.
+- The description package and navigation launch export the package `share` parent so Gazebo can resolve robot mesh URIs independently of shell state.
+- Run `bws` in Zsh to rebuild and source the workspace.
+
+# Simulation RealSense
+- The D435-style RGB-D sensor uses the `0.15 0 0.10` mount and publishes color, depth, camera info, and points under `/camera`.
+- All simulation navigation launches isolate Gazebo transport and delay spawning to prevent stale servers from stealing the robot.
+- One Ctrl-C shuts down the isolated Gazebo and ROS launch tree.
+
+## RViz Camera jitter
+- Symptoms: `camera_optical_frame ... queue is full` or `timestamp ... earlier than all the data in the transform cache`; the Camera display jumps while Image stays smooth.
+- Cause: Camera renders timestamped 3D overlays through `map -> odom -> base_footprint -> camera`. Delayed images expose AMCL corrections to `map -> odom`; odometry drift is smooth, while AMCL correction and stale frames produce jumps.
+- For plain video, use an Image display on `/camera/color/image_raw` with Best Effort, Keep Last, and depth 1; RViz may remain fixed to `map`.
+- For 3D Camera overlays, use depth 1, Best Effort, minimal Visibility, and fixed frame `odom` for smooth local motion. Disable unused point-cloud displays or lower the camera rate if queues still fill.
+- Diagnose with `tf2_echo map odom`, `tf2_echo odom base_footprint`, `ros2 topic hz /camera/color/image_raw`, and `ros2 topic info /clock --verbose`.
+
+# Simulation AprilTag
+- `apriltag_36h11_0` is an installable, upright 200 mm marker on a 5 mm box with an RGB PNG texture.
+- Run `bws --packages-select my_robot_description`, then insert it with Gazebo's Resource Spawner.
+- `models/apriltag_assets/convert_svg_tags.py` converts all resized tag SVGs to crisp 1000 px RGB PNGs.
+- `maze_apriltags.sdf` includes only persistent tags; the launch file spawns the robot separately.
+
+# Staging and docking
+- `my_robot_docking` sends a coarse Nav2 staging goal, searches for the configured tag, then visually aligns `base_footprint` to the tag pose.
+- Dock definitions and final offsets are in `my_robot_docking/config/dock_database.yaml`; controller and safety limits are in `my_robot_docking/config/docking_config.yaml`.
+- `/cmd_vel_dock` has priority over Nav2 through `velocity_arbiter`; stale commands stop at `/cmd_vel_out`.
+- AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical D435.
+- Simulation starts docking from `my_robot_navigation/navigation.launch.py`. Hardware bringup also starts the D435; use `start_camera:=false` if its driver is already running.
+- Trigger: `ros2 action send_goal /dock my_robot_docking_msgs/action/Dock "{dock_id: home_dock, navigate_to_staging_pose: true, use_offset_override: false}" --feedback`.
+- The server stops on stale odometry/scan, tag loss, unsafe tag distance, front obstacles, cancellation, or timeout; retries reacquire the tag locally.
+- Set a dock's `reverse_docking: true` to capture its tag, rotate the final heading by 180 degrees, and back into the same tag-relative position with rear-sector LiDAR safety.
+- Keep `staging_pose` facing the tag; reverse mode changes only the final approach and heading.
+- The front D435 cannot see behind the robot, so reverse mode freezes the tag goal in `odom`; `max_reverse_distance` bounds that non-visual final approach.
 
 # Test coverage planner
 - `test_coverage` plans optimized Boustrophedon sweeps with smooth headlands and safe, corner-segmented inter-cell transits.

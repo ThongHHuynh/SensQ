@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
-from launch.actions import IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription, LogInfo, SetEnvironmentVariable, TimerAction
 from launch.substitutions import Command
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 import os
@@ -14,6 +14,8 @@ def generate_launch_description():
     port = "/dev/ttyUSB0"
     # Gazebo launch should not talk to real hardware even if a serial device exists.
     use_mock = True
+    # Isolate this run so a stale Gazebo server cannot receive its spawn request.
+    gazebo_partition = f"my_robot_{os.getpid()}"
 
     robot_description_path = get_package_share_path('my_robot_description')
     robot_bringup_path = get_package_share_path('my_robot_bringup')
@@ -77,6 +79,10 @@ def generate_launch_description():
         ],
         output="screen",
     )
+    delayed_spawn_entity = TimerAction(
+        period=2.0,
+        actions=[spawn_entity],
+    )
     ros_gz_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -94,6 +100,8 @@ def generate_launch_description():
 
 
     ld = LaunchDescription()
+    ld.add_action(SetEnvironmentVariable("IGN_PARTITION", gazebo_partition))
+    ld.add_action(LogInfo(msg=f"Gazebo transport partition: {gazebo_partition}"))
     ld.add_action(robot_state_publisher_node)
     # ld.add_action(controller_node)
     # ld.add_action(joint_state_broadcaster)
@@ -101,7 +109,7 @@ def generate_launch_description():
     # ld.add_action(joint_state_publisher_gui_node)
     ld.add_action(rviz2_node)
     ld.add_action(gz_sim)
-    ld.add_action(spawn_entity)
+    ld.add_action(delayed_spawn_entity)
     ld.add_action(ros_gz_bridge)
     ld.add_action(slam_node)
 

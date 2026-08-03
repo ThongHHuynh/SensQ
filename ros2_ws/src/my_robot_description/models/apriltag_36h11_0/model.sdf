@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="apriltag_36h11_0">
+    <static>true</static>
+
+    <link name="tag_link">
+      <!-- A thin upright backing gives the marker visible front and back faces. -->
+      <visual name="tag_visual">
+        <pose>0 0 0.10 0 0 0</pose>
+        <cast_shadows>false</cast_shadows>
+        <geometry>
+          <box>
+            <size>0.005 0.20 0.20</size>
+          </box>
+        </geometry>
+        <material>
+          <lighting>true</lighting>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>materials/textures/tag36_11_00000_rgb.png</albedo_map>
+              <metalness>0</metalness>
+              <roughness>1</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+
+      <collision name="tag_collision">
+        <pose>0 0 0.10 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.005 0.20 0.20</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

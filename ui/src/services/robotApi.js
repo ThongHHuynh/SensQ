@@ -79,6 +79,35 @@ export async function sendTeleopCommand({ linear_x = 0, angular_z = 0 }) {
   return response.json();
 }
 
+async function dockingResponse(response, fallback) {
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.detail || fallback);
+  }
+  return payload;
+}
+
+export async function fetchDockingConfig() {
+  const response = await fetch(`${API_BASE_URL}/api/docking/config`);
+  return dockingResponse(response, `Docking configuration failed: ${response.status}`);
+}
+
+export async function startDocking(goal) {
+  const response = await fetch(`${API_BASE_URL}/api/docking/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(goal)
+  });
+  return dockingResponse(response, `Docking start failed: ${response.status}`);
+}
+
+export async function cancelDocking() {
+  const response = await fetch(`${API_BASE_URL}/api/docking/cancel`, {
+    method: "POST"
+  });
+  return dockingResponse(response, `Docking cancellation failed: ${response.status}`);
+}
+
 export async function startMapping() {
   const response = await fetch(`${API_BASE_URL}/api/mapping/start`, {
     method: "POST"

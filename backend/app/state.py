@@ -38,6 +38,17 @@ def initial_snapshot() -> dict:
             "localization": "Waiting",
             "mapping": "idle",
         },
+        "docking": {
+            "active": False,
+            "state": "IDLE",
+            "request": None,
+            "distanceRemaining": None,
+            "lateralError": None,
+            "yawError": None,
+            "retryCount": 0,
+            "result": None,
+            "updatedAt": None,
+        },
         "liveMap": {
             "frame": "map",
             "width": 0,

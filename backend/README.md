@@ -169,6 +169,9 @@ Saved maps are written under `data/maps/` and registered in PostgreSQL table `sa
 - `POST /api/teleop/start`
 - `POST /api/teleop/stop`
 - `POST /api/teleop/cmd_vel`
+- `GET /api/docking/config`
+- `POST /api/docking/start`
+- `POST /api/docking/cancel`
 - `GET /api/maps`
 - `POST /api/mapping/start`
 - `POST /api/mapping/stop`

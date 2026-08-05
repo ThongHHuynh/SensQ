@@ -4,9 +4,21 @@ import os
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 ROS_WORKSPACE = Path(os.getenv("ROS_WORKSPACE", ROOT_DIR / "ros2_ws"))
+DOCK_DATABASE_FILE = Path(
+    os.getenv(
+        "SENSQ_DOCK_DATABASE",
+        ROS_WORKSPACE / "src/my_robot_docking/config/dock_database.yaml",
+    )
+)
+DOCKING_CONFIG_FILE = Path(
+    os.getenv(
+        "SENSQ_DOCKING_CONFIG",
+        ROS_WORKSPACE / "src/my_robot_docking/config/docking_config.yaml",
+    )
+)
 DATA_DIR = Path(os.getenv("SENSQ_DATA_DIR", ROOT_DIR / "data"))
 MAP_SAVE_DIR = Path(os.getenv("SENSQ_MAP_SAVE_DIR", DATA_DIR / "maps"))
-ROS_DISTRO = os.getenv("ROS_DISTRO", "jazzy")
+ROS_DISTRO = os.getenv("ROS_DISTRO", "humble")
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://sensq:sensq@localhost:5432/sensq",

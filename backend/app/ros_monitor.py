@@ -7,7 +7,7 @@ from typing import Callable
 
 from .config import CMD_VEL_TOPIC, JOINT_STATES_TOPIC, ODOM_TOPIC
 from .database import save_snapshot
-from .state import robot_state
+from .state import robot_state, utc_now
 from .websocket_manager import ws_manager
 
 
@@ -71,7 +71,7 @@ def occupancy_grid_to_payload(msg, max_cells: int = 260) -> dict:
 
 
 class RosMonitor:
-    def __init__(self, publish: Callable[[dict], None]) -> None:
+    def __init__(self, publish: Callable[[dict], None], dock_action_name: str) -> None:
         self._publish = publish
         self._thread: Thread | None = None
         self._lock = Lock()
@@ -79,11 +79,22 @@ class RosMonitor:
         self._twist_type = None
         self._ros_available = False
         self._status_message = "ROS monitor has not started"
+        self._dock_action_name = dock_action_name
+        self._dock_client = None
+        self._dock_type = None
+        self._dock_goal_handle = None
+        self._dock_goal_pending = False
+        self._dock_cancel_requested = False
+        self._dock_feedback_states = {}
+        self._dock_goal_statuses = {}
 
     def start(self) -> None:
         try:
             import rclpy
+            from action_msgs.msg import GoalStatus
             from geometry_msgs.msg import Twist
+            from my_robot_docking_msgs.action import Dock
+            from rclpy.action import ActionClient
         except ImportError as exc:
             message = f"ROS command publisher disabled: {exc}"
             with self._lock:
@@ -104,11 +115,36 @@ class RosMonitor:
                 rclpy.init(args=None)
                 node = rclpy.create_node("sensq_backend_monitor")
                 cmd_vel_publisher = node.create_publisher(Twist, CMD_VEL_TOPIC, 10)
+                dock_client = ActionClient(
+                    node,
+                    Dock,
+                    self._dock_action_name,
+                )
                 with self._lock:
                     self._cmd_vel_publisher = cmd_vel_publisher
                     self._twist_type = Twist
                     self._ros_available = True
                     self._status_message = f"Publishing {CMD_VEL_TOPIC}"
+                    self._dock_client = dock_client
+                    self._dock_type = Dock
+                    self._dock_feedback_states = {
+                        Dock.Feedback.IDLE: "IDLE",
+                        Dock.Feedback.NAVIGATING: "NAVIGATING",
+                        Dock.Feedback.SEARCHING: "SEARCHING",
+                        Dock.Feedback.APPROACHING: "APPROACHING",
+                        Dock.Feedback.ALIGNING: "ALIGNING",
+                        Dock.Feedback.VERIFYING: "VERIFYING",
+                        Dock.Feedback.RETRYING: "RETRYING",
+                    }
+                    self._dock_goal_statuses = {
+                        GoalStatus.STATUS_UNKNOWN: "UNKNOWN",
+                        GoalStatus.STATUS_ACCEPTED: "ACCEPTED",
+                        GoalStatus.STATUS_EXECUTING: "EXECUTING",
+                        GoalStatus.STATUS_CANCELING: "CANCELING",
+                        GoalStatus.STATUS_SUCCEEDED: "SUCCEEDED",
+                        GoalStatus.STATUS_CANCELED: "CANCELED",
+                        GoalStatus.STATUS_ABORTED: "ABORTED",
+                    }
 
                 snapshot = robot_state.update_device("Web teleop", "online", f"Publishing {CMD_VEL_TOPIC}", CMD_VEL_TOPIC)
                 self._publish(snapshot)
@@ -262,8 +298,174 @@ class RosMonitor:
         publisher.publish(twist)
         return True, f"Published {CMD_VEL_TOPIC}"
 
+    def start_docking(self, request: dict) -> tuple[bool, str]:
+        with self._lock:
+            client = self._dock_client
+            dock_type = self._dock_type
+            active = self._dock_goal_pending or self._dock_goal_handle is not None
 
-def create_monitor(loop: asyncio.AbstractEventLoop) -> RosMonitor:
+        if active:
+            return False, "A docking goal is already active"
+        if not self._ros_available or client is None or dock_type is None:
+            return False, "ROS docking client is not initialized"
+        if not client.server_is_ready():
+            return False, f"Dock action {self._dock_action_name} is unavailable"
+
+        goal = dock_type.Goal()
+        goal.dock_id = request["dock_id"]
+        goal.navigate_to_staging_pose = request["navigate_to_staging_pose"]
+        goal.use_offset_override = request["use_offset_override"]
+        goal.final_distance = request["final_distance"]
+        goal.lateral_offset = request["lateral_offset"]
+        goal.yaw_offset = request["yaw_offset"]
+
+        with self._lock:
+            self._dock_goal_pending = True
+            self._dock_cancel_requested = False
+
+        self._publish_docking(
+            {
+                "active": True,
+                "state": "SENDING",
+                "request": request,
+                "distanceRemaining": None,
+                "lateralError": None,
+                "yawError": None,
+                "retryCount": 0,
+                "result": None,
+            }
+        )
+        try:
+            future = client.send_goal_async(
+                goal,
+                feedback_callback=self._docking_feedback,
+            )
+            future.add_done_callback(self._docking_goal_response)
+        except Exception as error:
+            self._fail_docking(f"Could not send docking goal: {error}")
+            return False, str(error)
+        return True, f"Docking goal sent to {request['dock_id']}"
+
+    def cancel_docking(self) -> tuple[bool, str]:
+        with self._lock:
+            pending = self._dock_goal_pending
+            goal_handle = self._dock_goal_handle
+            if pending:
+                self._dock_cancel_requested = True
+
+        if pending and goal_handle is None:
+            self._publish_docking({"state": "CANCELING"})
+            return True, "Docking cancellation queued"
+        if goal_handle is None:
+            return False, "There is no active docking goal"
+
+        self._publish_docking({"state": "CANCELING"})
+        try:
+            goal_handle.cancel_goal_async()
+        except Exception as error:
+            self._fail_docking(f"Could not cancel docking: {error}")
+            return False, str(error)
+        return True, "Docking cancellation requested"
+
+    def _docking_goal_response(self, future) -> None:
+        try:
+            goal_handle = future.result()
+        except Exception as error:
+            self._fail_docking(f"Docking goal request failed: {error}")
+            return
+
+        if goal_handle is None or not goal_handle.accepted:
+            self._fail_docking("Docking goal was rejected", state="REJECTED")
+            return
+
+        with self._lock:
+            self._dock_goal_pending = False
+            self._dock_goal_handle = goal_handle
+            cancel_requested = self._dock_cancel_requested
+
+        self._publish_docking({"active": True, "state": "ACCEPTED"})
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self._docking_result)
+        if cancel_requested:
+            goal_handle.cancel_goal_async()
+            self._publish_docking({"state": "CANCELING"})
+
+    def _docking_feedback(self, message) -> None:
+        feedback = message.feedback
+        state = self._dock_feedback_states.get(
+            feedback.state,
+            f"STATE_{feedback.state}",
+        )
+        self._publish_docking(
+            {
+                "active": True,
+                "state": state,
+                "distanceRemaining": round(float(feedback.distance_remaining), 4),
+                "lateralError": round(float(feedback.lateral_error), 4),
+                "yawError": round(float(feedback.yaw_error), 4),
+                "retryCount": int(feedback.retry_count),
+            }
+        )
+
+    def _docking_result(self, future) -> None:
+        try:
+            wrapped_result = future.result()
+            result = wrapped_result.result
+            goal_status = self._dock_goal_statuses.get(
+                wrapped_result.status,
+                f"STATUS_{wrapped_result.status}",
+            )
+        except Exception as error:
+            self._fail_docking(f"Docking result failed: {error}")
+            return
+
+        with self._lock:
+            self._dock_goal_handle = None
+            self._dock_goal_pending = False
+            self._dock_cancel_requested = False
+
+        success = bool(result.success)
+        self._publish_docking(
+            {
+                "active": False,
+                "state": "SUCCEEDED" if success else goal_status,
+                "result": {
+                    "success": success,
+                    "errorCode": int(result.error_code),
+                    "message": str(result.message),
+                    "goalStatus": goal_status,
+                },
+            }
+        )
+
+    def _fail_docking(self, message: str, state: str = "ERROR") -> None:
+        with self._lock:
+            self._dock_goal_handle = None
+            self._dock_goal_pending = False
+            self._dock_cancel_requested = False
+        self._publish_docking(
+            {
+                "active": False,
+                "state": state,
+                "result": {
+                    "success": False,
+                    "errorCode": -1,
+                    "message": message,
+                    "goalStatus": state,
+                },
+            }
+        )
+
+    def _publish_docking(self, patch: dict) -> None:
+        patch["updatedAt"] = utc_now()
+        snapshot = robot_state.update({"docking": patch})
+        self._publish(snapshot)
+
+
+def create_monitor(
+    loop: asyncio.AbstractEventLoop,
+    dock_action_name: str,
+) -> RosMonitor:
     snapshot_interval_seconds = 5.0
     last_snapshot_at = 0.0
 
@@ -277,4 +479,4 @@ def create_monitor(loop: asyncio.AbstractEventLoop) -> RosMonitor:
             last_snapshot_at = now
             asyncio.run_coroutine_threadsafe(save_snapshot(snapshot), loop)
 
-    return RosMonitor(publish)
+    return RosMonitor(publish, dock_action_name)

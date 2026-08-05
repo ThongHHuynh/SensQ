@@ -32,6 +32,14 @@ docking_server:
     search_angular_speed: 0.20
     search_angle_limit: 1.57
 
+    # Retry recovery
+    retry_backup_distance: 0.20  # metres
+    retry_backup_speed: 0.05
+    retry_rotation_angle: 0.35  # radians
+    retry_rotation_speed: 0.20  # radians/second
+    retry_recovery_timeout: 10.0  # seconds
+    rotation_stop_distance: 0.30  # footprint radius plus safety margin
+
     # Controller limits
     max_linear_speed: 0.10
     max_angular_speed: 0.40

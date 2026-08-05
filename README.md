@@ -4,6 +4,8 @@
 
 SensQ uses a web UI, backend API, database, and ROS 2 robot stack to let users monitor devices, view camera frames, run mapping, save maps, and send navigation commands.
 
+The Docking page selects docks from the ROS database, sends `/dock` goals through FastAPI, streams feedback, and supports cancellation.
+
 The main rule:
 
 > The frontend should never directly control ROS topics, services, actions, hardware, or shell commands.

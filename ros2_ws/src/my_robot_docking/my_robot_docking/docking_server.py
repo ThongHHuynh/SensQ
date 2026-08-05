@@ -78,6 +78,7 @@ class DockingServer(Node):
         self._odom_pose = None
         self._front_clearance = math.inf
         self._rear_clearance = math.inf
+        self._rotation_clearance = math.inf
         self._last_command = Twist()
         self._last_command_time = time.monotonic()
 
@@ -159,6 +160,12 @@ class DockingServer(Node):
             'verification_duration': 0.3,
             'search_angular_speed': 0.2,
             'search_angle_limit': 1.57,
+            'retry_backup_distance': 0.2,
+            'retry_backup_speed': 0.05,
+            'retry_rotation_angle': 0.35,
+            'retry_rotation_speed': 0.2,
+            'retry_recovery_timeout': 10.0,
+            'rotation_stop_distance': 0.3,
             'max_linear_speed': 0.1,
             'max_angular_speed': 0.4,
             'max_linear_acceleration': 0.2,
@@ -213,6 +220,12 @@ class DockingServer(Node):
             'verification_duration',
             'search_angular_speed',
             'search_angle_limit',
+            'retry_backup_distance',
+            'retry_backup_speed',
+            'retry_rotation_angle',
+            'retry_rotation_speed',
+            'retry_recovery_timeout',
+            'rotation_stop_distance',
             'max_linear_speed',
             'max_angular_speed',
             'max_linear_acceleration',
@@ -256,6 +269,12 @@ class DockingServer(Node):
             'verification_duration',
             'search_angular_speed',
             'search_angle_limit',
+            'retry_backup_distance',
+            'retry_backup_speed',
+            'retry_rotation_angle',
+            'retry_rotation_speed',
+            'retry_recovery_timeout',
+            'rotation_stop_distance',
             'max_linear_speed',
             'max_angular_speed',
             'max_linear_acceleration',
@@ -283,6 +302,14 @@ class DockingServer(Node):
             )
         if self.max_retries < 0:
             raise ValueError('max_retries cannot be negative')
+        if self.retry_rotation_angle > math.pi:
+            raise ValueError('retry_rotation_angle cannot exceed pi')
+        if self.retry_backup_speed > self.max_linear_speed:
+            raise ValueError('retry_backup_speed cannot exceed max_linear_speed')
+        if self.retry_rotation_speed > self.max_angular_speed:
+            raise ValueError(
+                'retry_rotation_speed cannot exceed max_angular_speed'
+            )
         if abs(self.tag_normal_sign) < 1e-6:
             raise ValueError('tag_normal_sign must be non-zero')
         if not math.isfinite(self.scan_forward_angle):
@@ -322,6 +349,15 @@ class DockingServer(Node):
             self.scan_forward_angle,
             self.front_sector_half_angle,
             self.rear_sector_half_angle,
+        )
+        self._rotation_clearance = min(
+            (
+                float(value)
+                for value in message.ranges
+                if math.isfinite(value)
+                and message.range_min <= value <= message.range_max
+            ),
+            default=math.inf,
         )
         self._last_scan_received_ns = self.get_clock().now().nanoseconds
 
@@ -469,7 +505,29 @@ class DockingServer(Node):
                 )
                 self._stop_robot()
 
-                if (
+                tag_failure = outcome in (
+                    ApproachOutcome.TAG_NOT_FOUND,
+                    ApproachOutcome.TAG_LOST,
+                )
+                if tag_failure:
+                    recovery, recovery_message = self._recover_for_retry(
+                        goal_handle,
+                        attempt + 1,
+                    )
+                    if recovery == ApproachOutcome.CANCELLED:
+                        return self._cancel_result(goal_handle)
+                    if recovery != ApproachOutcome.SUCCEEDED:
+                        error_code = (
+                            Dock.Result.SAFETY_STOP
+                            if recovery == ApproachOutcome.SAFETY_STOP
+                            else Dock.Result.CONTROL_FAILED
+                        )
+                        return self._abort_result(
+                            goal_handle,
+                            error_code,
+                            recovery_message,
+                        )
+                elif (
                     request.navigate_to_staging_pose
                     and self.return_to_staging_on_retry
                 ):
@@ -658,6 +716,135 @@ class DockingServer(Node):
             ApproachOutcome.TAG_NOT_FOUND,
             f'Tag {dock.tag_id} was not found',
         )
+
+    def _recover_for_retry(self, goal_handle, retry_number):
+        """Back up and rotate using odometry before another tag search."""
+
+        period = 1.0 / self.control_rate
+        deadline = time.monotonic() + self.retry_recovery_timeout
+        start_pose = self._latest_odom_pose()
+        if start_pose is None:
+            return ApproachOutcome.SAFETY_STOP, 'Odometry pose is unavailable'
+
+        self.get_logger().info(
+            f'Docking retry {retry_number}: backing up '
+            f'{self.retry_backup_distance:.3f} m'
+        )
+
+        try:
+            current_pose = start_pose
+            while rclpy.ok() and time.monotonic() < deadline:
+                if goal_handle.is_cancel_requested:
+                    return ApproachOutcome.CANCELLED, 'Docking cancelled'
+
+                safety = self._retry_recovery_safety_reason(rotating=False)
+                if safety is not None:
+                    return ApproachOutcome.SAFETY_STOP, safety
+
+                current_pose = self._latest_odom_pose()
+                if current_pose is None:
+                    return (
+                        ApproachOutcome.SAFETY_STOP,
+                        'Odometry pose is unavailable',
+                    )
+
+                travelled = math.hypot(
+                    current_pose.x - start_pose.x,
+                    current_pose.y - start_pose.y,
+                )
+                if travelled >= self.retry_backup_distance:
+                    break
+
+                self._publish_feedback(
+                    goal_handle,
+                    Dock.Feedback.RETRYING,
+                    distance=(self.retry_backup_distance - travelled),
+                    retries=retry_number,
+                )
+                command = Twist()
+                command.linear.x = -self.retry_backup_speed
+                self._publish_dock_command(command)
+                time.sleep(period)
+            else:
+                return (
+                    ApproachOutcome.TIMED_OUT,
+                    'Retry backup timed out',
+                )
+
+            self._stop_robot()
+            time.sleep(period)
+
+            rotation_offset = self._retry_rotation_offset(retry_number)
+            target_yaw = self._normalize_angle(
+                current_pose.yaw + rotation_offset
+            )
+            self.get_logger().info(
+                f'Docking retry {retry_number}: rotating '
+                f'{rotation_offset:.3f} rad'
+            )
+
+            while rclpy.ok() and time.monotonic() < deadline:
+                if goal_handle.is_cancel_requested:
+                    return ApproachOutcome.CANCELLED, 'Docking cancelled'
+
+                safety = self._retry_recovery_safety_reason(rotating=True)
+                if safety is not None:
+                    return ApproachOutcome.SAFETY_STOP, safety
+
+                current_pose = self._latest_odom_pose()
+                if current_pose is None:
+                    return (
+                        ApproachOutcome.SAFETY_STOP,
+                        'Odometry pose is unavailable',
+                    )
+
+                yaw_error = self._normalize_angle(
+                    target_yaw - current_pose.yaw
+                )
+                if abs(yaw_error) <= self.yaw_tolerance:
+                    return ApproachOutcome.SUCCEEDED, 'Retry recovery complete'
+
+                self._publish_feedback(
+                    goal_handle,
+                    Dock.Feedback.RETRYING,
+                    yaw=yaw_error,
+                    retries=retry_number,
+                )
+                command = Twist()
+                command.angular.z = self._clamp(
+                    self.heading_kp * yaw_error,
+                    -self.retry_rotation_speed,
+                    self.retry_rotation_speed,
+                )
+                self._publish_dock_command(command)
+                time.sleep(period)
+
+            return ApproachOutcome.TIMED_OUT, 'Retry rotation timed out'
+        finally:
+            self._stop_robot()
+
+    def _retry_recovery_safety_reason(self, rotating):
+        reason = self._sensor_safety_reason(require_scan=True)
+        if reason is not None:
+            return reason
+        if rotating:
+            if self._rotation_clearance < self.rotation_stop_distance:
+                return (
+                    f'Obstacle at {self._rotation_clearance:.3f} m is inside '
+                    f'the {self.rotation_stop_distance:.3f} m rotation '
+                    'stop distance'
+                )
+            return None
+        if self._rear_clearance < self.rear_stop_distance:
+            return (
+                f'Rear obstacle at {self._rear_clearance:.3f} m is inside '
+                f'the {self.rear_stop_distance:.3f} m stop distance'
+            )
+        return None
+
+    def _retry_rotation_offset(self, retry_number):
+        direction = 1.0 if retry_number % 2 == 1 else -1.0
+        return direction * self.retry_rotation_angle
 
     def _approach_tag(
         self,

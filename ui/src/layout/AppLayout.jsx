@@ -40,7 +40,7 @@ function AppLayout({ tabs, activeTab, onTabChange, children }) {
               <div className="text-xs text-slate-500">Robot Console</div>
             </div>
           </div>
-          <nav className="grid grid-cols-5 gap-1" aria-label="Primary">
+          <nav className="grid grid-cols-3 gap-1 sm:grid-cols-6" aria-label="Primary">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = tab.id === activeTab;

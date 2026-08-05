@@ -115,7 +115,7 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical D435.
 - Simulation starts docking from `my_robot_navigation/navigation.launch.py`. Hardware bringup also starts the D435; use `start_camera:=false` if its driver is already running.
 - Trigger: `ros2 action send_goal /dock my_robot_docking_msgs/action/Dock "{dock_id: home_dock, navigate_to_staging_pose: true, use_offset_override: false}" --feedback`.
-- The server stops on stale odometry/scan, tag loss, unsafe tag distance, front obstacles, cancellation, or timeout; retries reacquire the tag locally.
+- Tag-not-found/lost retries back up with rear LiDAR safety, rotate, then reacquire the tag locally.
 - Set a dock's `reverse_docking: true` to capture its tag, rotate the final heading by 180 degrees, and back into the same tag-relative position with rear-sector LiDAR safety.
 - Keep `staging_pose` facing the tag; reverse mode changes only the final approach and heading.
 - The front D435 cannot see behind the robot, so reverse mode freezes the tag goal in `odom`; `max_reverse_distance` bounds that non-visual final approach.

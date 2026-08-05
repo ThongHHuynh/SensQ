@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Battery, Compass, Cpu, Radio } from "lucide-react";
+import { Anchor, Battery, Compass, Cpu, Radio } from "lucide-react";
 import MetricCard from "../components/MetricCard.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import RobotModelViewer from "../components/RobotModelViewer.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
 import { startMobileBase, stopRobot } from "../services/robotApi.js";
 
-function HomePage({ robot, setRobot, source, error }) {
+function HomePage({ robot, setRobot, source, error, onOpenDocking }) {
   const launchState = robot.connection.launchState ?? "unknown";
   const [actionError, setActionError] = useState(null);
   const temperature =
@@ -47,6 +47,14 @@ function HomePage({ robot, setRobot, source, error }) {
         description="Operator-facing summary for connection state, hardware readiness, battery, and navigation context."
         actions={
           <>
+            <button
+              type="button"
+              onClick={onOpenDocking}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+            >
+              <Anchor className="h-4 w-4" aria-hidden="true" />
+              Dock Robot
+            </button>
             <button
               type="button"
               onClick={handleStart}

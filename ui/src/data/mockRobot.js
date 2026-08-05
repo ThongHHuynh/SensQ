@@ -38,6 +38,17 @@ export const robotSnapshot = {
     activeMap: "Lab floor draft",
     localization: "Nominal"
   },
+  docking: {
+    active: false,
+    state: "IDLE",
+    request: null,
+    distanceRemaining: null,
+    lateralError: null,
+    yawError: null,
+    retryCount: 0,
+    result: null,
+    updatedAt: null
+  },
   liveMap: {
     frame: "map",
     width: 48,

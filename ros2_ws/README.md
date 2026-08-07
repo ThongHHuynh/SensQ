@@ -108,6 +108,12 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - `models/apriltag_assets/convert_svg_tags.py` converts all resized tag SVGs to crisp 1000 px RGB PNGs.
 - `maze_apriltags.sdf` includes only persistent tags; the launch file spawns the robot separately.
 
+# CSI camera AprilTag
+- `csi_camera` publishes synchronized `/camera/image_raw` and `/camera/camera_info` with sensor-data QoS.
+- Build with `bws --packages-select csi_camera`, then run `ros2 run csi_camera camera_node --ros-args -p camera_info_url:=file:///absolute/path/camera.yaml`.
+- The calibration YAML must match the selected resolution; the default frame is `camera_optical_frame`.
+- Run AprilTag with `qos_profile:=sensor_data`, remapping `image_rect` to `/camera/image_raw` and `camera_info` to `/camera/camera_info`.
+
 # Staging and docking
 - `my_robot_docking` sends a coarse Nav2 staging goal, searches for the configured tag, then visually aligns `base_footprint` to the tag pose.
 - Dock definitions and final offsets are in `my_robot_docking/config/dock_database.yaml`; controller and safety limits are in `my_robot_docking/config/docking_config.yaml`.

@@ -84,7 +84,7 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - NavigateToPose counts rotational progress, permits faster smoothed turns, and waits 1 s during BT recovery.
 
 # Simulation IMU
-- `navigation.launch.py` fuses `/imu` and wheel odometry using `simulation-ekf.yaml`.
+- `simulation.launch.py` fuses `/imu` and wheel odometry using `simulation-ekf.yaml`.
 - Use `headless:=true use_rviz:=false` for GUI-free simulation.
 - The maze SDF resolves `maze.dae` from its installed `worlds` directory.
 - The description package and navigation launch export the package `share` parent so Gazebo can resolve robot mesh URIs independently of shell state.
@@ -113,18 +113,19 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - Build with `bws --packages-select csi_camera`, then run `ros2 run csi_camera camera_node --ros-args -p camera_info_url:=file:///absolute/path/camera.yaml`.
 - The calibration YAML must match the selected resolution; the default frame is `camera_optical_frame`.
 - Run AprilTag with `qos_profile:=sensor_data`, remapping `image_rect` to `/camera/image_raw` and `camera_info` to `/camera/camera_info`.
+- Real robot: `ros2 launch my_robot_navigation bringup.launch.py camera_info_url:=file:///absolute/path/camera.yaml`.
 
 # Staging and docking
 - `my_robot_docking` sends a coarse Nav2 staging goal, searches for the configured tag, then visually aligns `base_footprint` to the tag pose.
 - Dock definitions and final offsets are in `my_robot_docking/config/dock_database.yaml`; controller and safety limits are in `my_robot_docking/config/docking_config.yaml`.
 - `/cmd_vel_dock` has priority over Nav2 through `velocity_arbiter`; stale commands stop at `/cmd_vel_out`.
-- AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical D435.
-- Simulation starts docking from `my_robot_navigation/navigation.launch.py`. Hardware bringup also starts the D435; use `start_camera:=false` if its driver is already running.
+- AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical CSI camera.
+- Simulation starts docking from `my_robot_navigation/simulation.launch.py`; hardware bringup starts the CSI camera and AprilTag detector.
 - Trigger: `ros2 action send_goal /dock my_robot_docking_msgs/action/Dock "{dock_id: home_dock, navigate_to_staging_pose: true, use_offset_override: false}" --feedback`.
 - Tag-not-found/lost retries back up with rear LiDAR safety, rotate, then reacquire the tag locally.
 - Set a dock's `reverse_docking: true` to capture its tag, rotate the final heading by 180 degrees, and back into the same tag-relative position with rear-sector LiDAR safety.
 - Keep `staging_pose` facing the tag; reverse mode changes only the final approach and heading.
-- The front D435 cannot see behind the robot, so reverse mode freezes the tag goal in `odom`; `max_reverse_distance` bounds that non-visual final approach.
+- The front CSI camera cannot see behind the robot, so reverse mode freezes the tag goal in `odom`; `max_reverse_distance` bounds that non-visual final approach.
 
 # Test coverage planner
 - `test_coverage` plans optimized Boustrophedon sweeps with smooth headlands and safe, corner-segmented inter-cell transits.

@@ -30,6 +30,8 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     start_apriltag = LaunchConfiguration('start_apriltag')
     detector_qos = LaunchConfiguration('detector_qos')
+    image_topic = LaunchConfiguration('image_topic')
+    camera_info_topic = LaunchConfiguration('camera_info_topic')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -40,12 +42,22 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'start_apriltag',
             default_value='true',
-            description='Start apriltag_ros for the color camera.',
+            description='Start apriltag_ros for the configured camera.',
         ),
         DeclareLaunchArgument(
             'detector_qos',
             default_value='sensor_data',
             description='QoS preset used by the AprilTag camera subscriber.',
+        ),
+        DeclareLaunchArgument(
+            'image_topic',
+            default_value='/camera/image_raw',
+            description='Rectified or low-distortion image used by AprilTag.',
+        ),
+        DeclareLaunchArgument(
+            'camera_info_topic',
+            default_value='/camera/camera_info',
+            description='CameraInfo paired with the AprilTag image.',
         ),
         Node(
             package='apriltag_ros',
@@ -54,8 +66,8 @@ def generate_launch_description():
             output='screen',
             condition=IfCondition(start_apriltag),
             remappings=[
-                ('image_rect', '/camera/color/image_raw'),
-                ('camera_info', '/camera/color/camera_info'),
+                ('image_rect', image_topic),
+                ('camera_info', camera_info_topic),
             ],
             parameters=[
                 detector_config,

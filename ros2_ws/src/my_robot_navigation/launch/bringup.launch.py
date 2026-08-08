@@ -20,6 +20,14 @@ def generate_launch_description():
     params_file = LaunchConfiguration("params_file")
     use_rviz = LaunchConfiguration("use_rviz")
     start_camera = LaunchConfiguration("start_camera")
+    camera_sensor_id = LaunchConfiguration("camera_sensor_id")
+    camera_width = LaunchConfiguration("camera_width")
+    camera_height = LaunchConfiguration("camera_height")
+    camera_fps = LaunchConfiguration("camera_fps")
+    camera_image_topic = LaunchConfiguration("camera_image_topic")
+    camera_info_topic = LaunchConfiguration("camera_info_topic")
+    camera_info_url = LaunchConfiguration("camera_info_url")
+    camera_frame_id = LaunchConfiguration("camera_frame_id")
     rviz_config = LaunchConfiguration("rviz_config")
 
     robot_description_path = get_package_share_path("my_robot_description")
@@ -115,7 +123,7 @@ def generate_launch_description():
     )
 
     lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(robot_bringup_path, "launch", "lidar.launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(robot_bringup_path, "launch", "peripherals", "lidar.launch.py")),
         launch_arguments={
             "serial_port": lidar_serial_port,
             "serial_baudrate": lidar_serial_baudrate,
@@ -126,23 +134,24 @@ def generate_launch_description():
             os.path.join(get_package_share_directory("tm_imu"), "launch", "imu.launch.py")
         )
     )
-    camera_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory("realsense2_camera"),
-                "launch",
-                "rs_launch.py",
-            )
-        ),
-        launch_arguments={
-            "camera_namespace": "",
-            "camera_name": "camera",
-            "device_type": "d435",
-            "enable_color": "true",
-            "enable_depth": "true",
-            "pointcloud.enable": "false",
-            "publish_tf": "true",
-        }.items(),
+    camera_node = Node(
+        package="csi_camera",
+        executable="camera_node",
+        name="jetson_csi_camera",
+        output="screen",
+        parameters=[
+            {
+                "use_sim_time": False,
+                "sensor_id": ParameterValue(camera_sensor_id, value_type=int),
+                "width": ParameterValue(camera_width, value_type=int),
+                "height": ParameterValue(camera_height, value_type=int),
+                "fps": ParameterValue(camera_fps, value_type=int),
+                "topic_name": camera_image_topic,
+                "camera_info_topic": camera_info_topic,
+                "camera_info_url": camera_info_url,
+                "frame_id": camera_frame_id,
+            }
+        ],
         condition=IfCondition(start_camera),
     )
 #EKF    
@@ -186,6 +195,9 @@ def generate_launch_description():
         launch_arguments={
             "use_sim_time": "false",
             "start_apriltag": "true",
+            "detector_qos": "sensor_data",
+            "image_topic": camera_image_topic,
+            "camera_info_topic": camera_info_topic,
         }.items(),
     )
 
@@ -238,7 +250,47 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "start_camera",
                 default_value="True",
-                description="Start the physical Intel RealSense D435 driver.",
+                description="Start the physical NVIDIA CSI camera driver.",
+            ),
+            DeclareLaunchArgument(
+                "camera_sensor_id",
+                default_value="0",
+                description="nvarguscamerasrc sensor ID.",
+            ),
+            DeclareLaunchArgument(
+                "camera_width",
+                default_value="640",
+                description="CSI image width; must match camera calibration.",
+            ),
+            DeclareLaunchArgument(
+                "camera_height",
+                default_value="480",
+                description="CSI image height; must match camera calibration.",
+            ),
+            DeclareLaunchArgument(
+                "camera_fps",
+                default_value="30",
+                description="CSI camera frame rate.",
+            ),
+            DeclareLaunchArgument(
+                "camera_image_topic",
+                default_value="/camera/image_raw",
+                description="CSI image topic consumed by AprilTag.",
+            ),
+            DeclareLaunchArgument(
+                "camera_info_topic",
+                default_value="/camera/camera_info",
+                description="CSI CameraInfo topic consumed by AprilTag.",
+            ),
+            DeclareLaunchArgument(
+                "camera_info_url",
+                default_value="",
+                description="file:// URL for matching CSI calibration YAML.",
+            ),
+            DeclareLaunchArgument(
+                "camera_frame_id",
+                default_value="camera_optical_frame",
+                description="Optical TF frame used by CSI image headers.",
             ),
             DeclareLaunchArgument(
                 "rviz_config",
@@ -251,7 +303,7 @@ def generate_launch_description():
             start_diff_drive_after_joint_state_broadcaster,
             lidar_launch,
             imu_launch,
-            camera_launch,
+            camera_node,
             delayed_ekf,
             delayed_nav2,
             docking,

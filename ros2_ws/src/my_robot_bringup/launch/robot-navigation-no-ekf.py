@@ -29,7 +29,6 @@ def generate_launch_description():
     controller_path = os.path.join(robot_bringup_path, "config", "my_robot_controller.yaml")
     default_nav2_params_path = os.path.join(robot_bringup_path, "config", "nav2_config.yaml")
     default_rviz_config_path = os.path.join(robot_navigation_path, "rviz", "navigation_config.rviz")
-    ekf_path = os.path.join(robot_bringup_path, "config", "ekf.yaml")
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",
@@ -99,13 +98,6 @@ def generate_launch_description():
         ],
         output="screen",
     )
-    ekf_node = Node(
-        package='robot_localization',
-        executable='ekf_node',
-        name='ekf_filter_node',
-        output='screen',
-        parameters=[ekf_path]
-    )
 
     delayed_joint_state_broadcaster = TimerAction(
         period=4.0,
@@ -120,7 +112,7 @@ def generate_launch_description():
     )
 
     lidar_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(robot_bringup_path, "launch", "lidar.launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(robot_bringup_path, "launch", "peripherals", "lidar.launch.py")),
         launch_arguments={
             "serial_port": lidar_serial_port,
             "serial_baudrate": lidar_serial_baudrate,
@@ -141,10 +133,17 @@ def generate_launch_description():
         }.items(),
     )
 
+    nav2_dir = GroupAction(
+        actions=[
+            SetRemap(src="/odom", dst="/diff_drive_controller/odom"),
+            SetRemap(src="odom", dst="/diff_drive_controller/odom"),
+            nav2_bringup,
+        ]
+    )
 
     delayed_nav2 = TimerAction(
-        period=2.0,
-        actions=[nav2_bringup],
+        period=4.0,
+        actions=[nav2_dir],
     )
 
     rviz2_node = Node(
@@ -202,7 +201,6 @@ def generate_launch_description():
             controller_node,
             delayed_joint_state_broadcaster,
             start_diff_drive_after_joint_state_broadcaster,
-            ekf_node,
             lidar_launch,
             delayed_nav2,
             rviz2_node,

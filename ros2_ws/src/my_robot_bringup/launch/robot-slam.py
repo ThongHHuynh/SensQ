@@ -18,7 +18,6 @@ def generate_launch_description():
     robot_description_path = get_package_share_path('my_robot_description')
     robot_bringup_path = get_package_share_path('my_robot_bringup')
 
-    #urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
     urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
     rviz_config_path = os.path.join(robot_description_path, 'rviz', 'lidar_config.rviz')
     controller_path = os.path.join(robot_bringup_path, 'config', 'my_robot_controller.yaml')
@@ -31,7 +30,7 @@ def generate_launch_description():
     
     lidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(robot_bringup_path, 'launch', 'lidar.launch.py')
+            os.path.join(robot_bringup_path, 'launch', 'peripherals' , 'lidar.launch.py')
         )
     )
 

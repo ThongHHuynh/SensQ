@@ -1,3 +1,5 @@
+"""Launch the complete Gazebo navigation and docking simulation."""
+
 from launch import LaunchDescription
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
@@ -144,6 +146,8 @@ def generate_launch_description():
             'use_sim_time': 'true',
             'start_apriltag': 'true',
             'detector_qos': 'system_default',
+            'image_topic': '/camera/color/image_raw',
+            'camera_info_topic': '/camera/color/camera_info',
         }.items(),
     )
 

@@ -20,8 +20,8 @@ def generate_launch_description():
 
     map_yaml = LaunchConfiguration("map")
     nav2_params_file = LaunchConfiguration("nav2_params_file")
-    use_rviz = LaunchConfiguration("use_rviz")
 
+    use_rviz = LaunchConfiguration("use_rviz")
     start_camera = LaunchConfiguration("start_camera")
     camera_sensor_id = LaunchConfiguration("camera_sensor_id")
     camera_width = LaunchConfiguration("camera_width")
@@ -251,7 +251,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "use_rviz",
-                default_value="True",
+                default_value="False",
                 description="Start RViz with the robot description config.",
             ),
             DeclareLaunchArgument(

@@ -8,7 +8,7 @@ config_local/
 .env
 *.local.yaml
 *.local.json
-backend/.venv/
+app/backend/.venv/
 
 # Generated robot data
 data/

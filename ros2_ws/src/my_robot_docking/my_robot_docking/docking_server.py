@@ -21,6 +21,7 @@ from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
+from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
 
 from my_robot_docking.dock_database import DockDatabase, DockDatabaseError
@@ -130,11 +131,36 @@ class DockingServer(Node):
             execute_callback=self._execute_callback,
             callback_group=self.callback_group,
         )
+        self.reload_service = self.create_service(
+            Trigger,
+            '~/reload_database',
+            self._reload_database,
+            callback_group=self.callback_group,
+        )
 
         self.get_logger().info(
             f'Docking server ready: action={self.dock_action}, '
             f'docks={self.database.ids()}'
         )
+
+    def _reload_database(self, _request, response):
+        with self._goal_lock:
+            if self._busy:
+                response.success = False
+                response.message = 'Cannot reload docks while docking is active'
+                return response
+            try:
+                database = DockDatabase(self.dock_database_file)
+            except DockDatabaseError as error:
+                response.success = False
+                response.message = str(error)
+                return response
+            self.database = database
+
+        response.success = True
+        response.message = f'Reloaded docks: {", ".join(self.database.ids())}'
+        self.get_logger().info(response.message)
+        return response
 
     def _declare_parameters(self):
         declarations = {

@@ -124,6 +124,7 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical CSI camera.
 - Simulation starts docking from `my_robot_navigation/simulation.launch.py`; hardware bringup starts the CSI camera and AprilTag detector.
 - Trigger: `ros2 action send_goal /dock my_robot_docking_msgs/action/Dock "{dock_id: home_dock, navigate_to_staging_pose: true, use_offset_override: false}" --feedback`.
+- The operator app can save stations and reload them through `/docking_server/reload_database` while docking is idle.
 - Tag-not-found/lost retries back up with rear LiDAR safety, rotate, then reacquire the tag locally.
 - Set a dock's `reverse_docking: true` to capture its tag, rotate the final heading by 180 degrees, and back into the same tag-relative position with rear-sector LiDAR safety.
 - Keep `staging_pose` facing the tag; reverse mode changes only the final approach and heading.

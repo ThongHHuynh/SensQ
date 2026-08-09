@@ -3,7 +3,7 @@ apriltag_node:
     image_transport: raw
     family: 36h11
     # The printed code occupies 80% of each 200 mm textured face.
-    size: 0.16
+    size: 0.13
     max_hamming: 0
     qos_profile: sensor_data
 
@@ -16,6 +16,6 @@ apriltag_node:
       debug: false
 
     tag:
-      ids: [0, 1]
-      frames: [tag_0, tag_1]
-      sizes: [0.16, 0.16]
+      ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      frames: [tag_0, tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7, tag_8, tag_9]
+      sizes: [0.13, 0.13, 0.13, 0.13, 0.13, 0.13, 0.13, 0.13, 0.13, 0.13]

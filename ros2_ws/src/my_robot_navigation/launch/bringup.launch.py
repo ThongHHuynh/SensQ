@@ -36,12 +36,14 @@ def generate_launch_description():
     robot_description_path = get_package_share_path("my_robot_description")
     robot_bringup_path = get_package_share_path("my_robot_bringup")
     robot_navigation_path = get_package_share_path("my_robot_navigation")
-    docking_path = get_package_share_path("my_robot_docking")
+    robot_docking_path = get_package_share_path("my_robot_docking")
+    robot_camera_path = get_package_share_path("csi_camera")
 
     urdf_path = os.path.join(robot_description_path, "urdf", "my_robot.urdf.xacro")
     controller_path = os.path.join(robot_bringup_path, "config", "my_robot_controller.yaml")
     default_nav2_params_path = os.path.join(robot_navigation_path, "config", "nav2_config.yaml")
     default_rviz_config_path = os.path.join(robot_navigation_path, "rviz", "navigation_config.rviz")
+    default_cam_calibration_path = os.path.join(robot_camera_path, "config", "camera.yaml")
     ekf_path = os.path.join(robot_navigation_path, "config", "ekf.yaml")
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
@@ -197,7 +199,7 @@ def generate_launch_description():
 
     docking = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(docking_path, "launch", "docking.launch.py")
+            os.path.join(robot_docking_path, "launch", "docking.launch.py")
         ),
         launch_arguments={
             "use_sim_time": "false",
@@ -291,7 +293,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "camera_info_url",
-                default_value="",
+                default_value=default_cam_calibration_path,
                 description="file:// URL for matching CSI calibration YAML.",
             ),
             DeclareLaunchArgument(

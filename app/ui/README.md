@@ -31,7 +31,7 @@ ui/
 
 ## Architecture
 
-The frontend is intentionally separated from ROS. React pages read robot state through `src/services/robotApi.js`. Today that service returns mock data from `src/data/mockRobot.js`; later it can call a backend endpoint such as `/api/robot/snapshot` or subscribe to a WebSocket stream without changing the page layout.
+The frontend is separated from ROS. React pages read backend and WebSocket state through `src/services/robotApi.js`, with `src/data/mockRobot.js` providing a schema-compatible fallback while the backend connects.
 
 Recommended future flow:
 

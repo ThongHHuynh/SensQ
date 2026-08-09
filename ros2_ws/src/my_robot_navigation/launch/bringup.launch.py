@@ -12,13 +12,16 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
+
     serial_port = LaunchConfiguration("serial_port")
     baud = LaunchConfiguration("baud")
     lidar_serial_port = LaunchConfiguration("lidar_serial_port")
     lidar_serial_baudrate = LaunchConfiguration("lidar_serial_baudrate")
+
     map_yaml = LaunchConfiguration("map")
-    params_file = LaunchConfiguration("params_file")
+    nav2_params_file = LaunchConfiguration("nav2_params_file")
     use_rviz = LaunchConfiguration("use_rviz")
+
     start_camera = LaunchConfiguration("start_camera")
     camera_sensor_id = LaunchConfiguration("camera_sensor_id")
     camera_width = LaunchConfiguration("camera_width")
@@ -97,7 +100,12 @@ def generate_launch_description():
         output="screen",
     )
 
-    diff_drive = Node(
+    delayed_joint_state_broadcaster = TimerAction(
+        period=1.0,
+        actions=[joint_state_broadcaster],
+    )
+
+    diff_drive_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=[
@@ -110,15 +118,10 @@ def generate_launch_description():
         output="screen",
     )
 
-    delayed_joint_state_broadcaster = TimerAction(
-        period=4.0,
-        actions=[joint_state_broadcaster],
-    )
-
     start_diff_drive_after_joint_state_broadcaster = RegisterEventHandler(
         OnProcessExit(
             target_action=joint_state_broadcaster,
-            on_exit=[diff_drive],
+            on_exit=[diff_drive_spawner],
         )
     )
 
@@ -163,10 +166,6 @@ def generate_launch_description():
         parameters=[ekf_path]
     )
 
-    delayed_ekf = TimerAction(
-        period=3.0,
-        actions=[ekf_node],
-    )
 #NAVIGATION
     nav2_bringup = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -174,7 +173,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "map": map_yaml,
-            "params_file": params_file,
+            "params_file": nav2_params_file,
             "use_sim_time": "false",
             "slam": "False",
             "autostart": "true",
@@ -183,9 +182,17 @@ def generate_launch_description():
     )
 
 
-    delayed_nav2 = TimerAction(
-        period=2.0,
-        actions=[nav2_bringup],
+    start_localization_after_diff_drive = RegisterEventHandler(
+        OnProcessExit(
+            target_action=diff_drive_spawner,
+            on_exit=[
+                ekf_node,
+                TimerAction(
+                    period=2.0,
+                    actions=[nav2_bringup],
+                ),
+            ],
+        )
     )
 
     docking = IncludeLaunchDescription(
@@ -238,7 +245,7 @@ def generate_launch_description():
                 description="Map YAML file loaded by Nav2 map_server.",
             ),
             DeclareLaunchArgument(
-                "params_file",
+                "nav2_params_file",
                 default_value=default_nav2_params_path,
                 description="Nav2 parameters file.",
             ),
@@ -301,11 +308,10 @@ def generate_launch_description():
             controller_node,
             delayed_joint_state_broadcaster,
             start_diff_drive_after_joint_state_broadcaster,
+            start_localization_after_diff_drive,
             lidar_launch,
             imu_launch,
             camera_node,
-            delayed_ekf,
-            delayed_nav2,
             docking,
             rviz2_node,
         ]

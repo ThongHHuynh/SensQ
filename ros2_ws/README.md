@@ -78,6 +78,7 @@ measured wheel radius consistently in collision geometry and the Gazebo
 DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 
 # Nav2 tuning
+- Real bringup starts the EKF after the diff-drive spawner exits, then starts Nav2 two seconds later.
 - DWB is tuned for faster coverage travel with straight tracking, no waypoint wait, and quick in-place turns.
 - Entry navigation uses DWB; complete coverage-cell paths use bounded-search
   Regulated Pure Pursuit.

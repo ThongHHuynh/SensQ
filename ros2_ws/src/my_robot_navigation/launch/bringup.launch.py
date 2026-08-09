@@ -37,6 +37,7 @@ def generate_launch_description():
     robot_bringup_path = get_package_share_path("my_robot_bringup")
     robot_navigation_path = get_package_share_path("my_robot_navigation")
     robot_docking_path = get_package_share_path("my_robot_docking")
+    
     robot_camera_path = get_package_share_path("csi_camera")
 
     urdf_path = os.path.join(robot_description_path, "urdf", "my_robot.urdf.xacro")

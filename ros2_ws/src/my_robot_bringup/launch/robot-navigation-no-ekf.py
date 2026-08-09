@@ -23,12 +23,12 @@ def generate_launch_description():
 
     robot_description_path = get_package_share_path("my_robot_description")
     robot_bringup_path = get_package_share_path("my_robot_bringup")
-    robot_navigation_path = get_package_share_path("my_robot_navigation")
+    # robot_navigation_path = get_package_share_path("my_robot_navigation")
 
     urdf_path = os.path.join(robot_description_path, "urdf", "my_robot.urdf.xacro")
     controller_path = os.path.join(robot_bringup_path, "config", "my_robot_controller.yaml")
     default_nav2_params_path = os.path.join(robot_bringup_path, "config", "nav2_config.yaml")
-    default_rviz_config_path = os.path.join(robot_navigation_path, "rviz", "navigation_config.rviz")
+    default_rviz_config_path = os.path.join(robot_bringup_path, "rviz", "navigation_config.rviz")
     default_map_path = os.path.join(
         os.getenv("ROS_WORKSPACE", "/home/tom/SensQ/ros2_ws"),
         "maps",

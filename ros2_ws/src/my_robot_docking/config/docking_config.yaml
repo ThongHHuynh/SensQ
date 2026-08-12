@@ -23,7 +23,7 @@ docking_server:
     tag_loss_grace_period: 0.75
     tag_search_timeout: 15.0
     navigation_timeout: 120.0
-    staging_acceptance_distance: 0.20
+    staging_acceptance_distance: 1.0
     navigation_feedback_rate: 5.0
     approach_timeout: 30.0
     verification_duration: 0.30
@@ -34,7 +34,7 @@ docking_server:
 
     # Retry recovery
     retry_backup_distance: 0.20  # metres
-    retry_backup_speed: 0.05
+    retry_backup_speed: 0.1
     retry_rotation_angle: 0.35  # radians
     retry_rotation_speed: 0.20  # radians/second
     retry_recovery_timeout: 10.0  # seconds
@@ -63,9 +63,9 @@ docking_server:
 
     # Safety
     minimum_tag_distance: 0.10
-    front_stop_distance: 0.18
+    front_stop_distance: 0.10
     front_sector_half_angle: 0.35
-    rear_stop_distance: 0.18
+    rear_stop_distance: 0.10
     rear_sector_half_angle: 0.35
     # lidar_link is mounted pi radians from base_footprint: pi=front, 0=rear.
     scan_forward_angle: 3.14159

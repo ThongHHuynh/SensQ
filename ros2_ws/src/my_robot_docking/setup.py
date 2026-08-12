@@ -36,6 +36,7 @@ setup(
         'console_scripts': [
             'docking_server = my_robot_docking.docking_server:main',
             'velocity_arbiter = my_robot_docking.velocity_arbiter:main',
+            'record_dock_pose = my_robot_docking.record_dock_pose:main',
         ],
     },
 )

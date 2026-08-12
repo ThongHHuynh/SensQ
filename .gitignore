@@ -6,6 +6,8 @@ ros2_ws/log/
 # Local machine settings / secrets
 config_local/
 .env
+.venv
+.venv/
 *.local.yaml
 *.local.json
 app/backend/.venv/
@@ -23,3 +25,7 @@ __pycache__/
 .vscode/
 .idea/
 algorithms/Fields2Cover/build/
+
+node_modules/
+dist/
+.vite/

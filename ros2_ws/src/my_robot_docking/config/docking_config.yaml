@@ -23,7 +23,7 @@ docking_server:
     tag_loss_grace_period: 0.75
     tag_search_timeout: 15.0
     navigation_timeout: 120.0
-    staging_acceptance_distance: 0.20
+    predocking_acceptance_distance: 0.20
     navigation_feedback_rate: 5.0
     approach_timeout: 30.0
     verification_duration: 0.30

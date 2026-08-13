@@ -53,9 +53,9 @@ def generate_launch_description():
     gazebo_resource_path = os.pathsep.join(gazebo_resource_entries)
 
     #slam_toolbox_path = os.path.join(robot_bringup_path, 'config', 'slam_toolbox.yaml')
-    nav2_params = os.path.join(robot_navigation_path, 'config', 'nav2_config.yaml')
+    nav2_params = os.path.join(robot_navigation_path, 'config', 'sim_nav2_config.yaml')
     simulation_ekf_path = os.path.join(
-        robot_navigation_path, 'config', 'simulation-ekf.yaml'
+        robot_navigation_path, 'config', 'sim-ekf.yaml'
     )
     robot_description = ParameterValue(Command(['xacro ', urdf_path,' ',
                                                 'use_mock_hardware:=', 'true' if use_mock else 'false', ' ',

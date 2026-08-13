@@ -1,5 +1,5 @@
 #version of the database schema. Increment this when making changes to the database format.
-schema_version: 1
+schema_version: 2
 
 docks:
   home_dock:
@@ -10,10 +10,9 @@ docks:
     # Approximate tag location in map: [x, y, yaw].
     reference_pose: [3.34689, 0.003265, 0.0]
 
-    # Nav2 goal before visual docking: [x, y, yaw].
-    staging_pose: [2.3, 0.003265, 0.0]
-
-    # Desired base_footprint pose relative to the tag.
+    # Tag-relative base_footprint distances on the docking centerline.
+    predocking_distance: 1.5
+    staging_distance: 1.04689
     final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0
@@ -27,8 +26,8 @@ docks:
     global_frame: "map"
 
     reference_pose: [1.0, 5.18213, 1.5708]
-    staging_pose: [1.0, 4.0, 1.5708]
-
+    predocking_distance: 1.5
+    staging_distance: 1.18213
     final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0

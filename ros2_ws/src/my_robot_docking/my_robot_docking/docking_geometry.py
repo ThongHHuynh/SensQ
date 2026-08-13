@@ -41,6 +41,34 @@ def normalize_angle(angle: float) -> float:
     return math.atan2(math.sin(angle), math.cos(angle))
 
 
+def target_pose_from_tag(
+    tag_pose: Pose2D,
+    distance: float,
+    lateral_offset: float,
+    yaw_offset: float,
+) -> Pose2D:
+    """Return a base pose on the configured approach line of a tag."""
+
+    yaw = normalize_angle(tag_pose.yaw + yaw_offset)
+    forward_x = math.cos(yaw)
+    forward_y = math.sin(yaw)
+    left_x = -forward_y
+    left_y = forward_x
+    return Pose2D(
+        x=(
+            tag_pose.x
+            - distance * forward_x
+            + lateral_offset * left_x
+        ),
+        y=(
+            tag_pose.y
+            - distance * forward_y
+            + lateral_offset * left_y
+        ),
+        yaw=yaw,
+    )
+
+
 def reverse_target_from_tag(
     robot_pose: Pose2D,
     tag_x_base: float,

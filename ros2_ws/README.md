@@ -118,8 +118,8 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - Real robot: `ros2 launch my_robot_navigation bringup.launch.py camera_info_url:=file:///absolute/path/camera.yaml`.
 
 # Staging and docking
-- `my_robot_docking` sends a coarse Nav2 staging goal, searches for the configured tag, then visually aligns `base_footprint` to the tag pose.
-- Dock definitions and final offsets are in `my_robot_docking/config/dock_database.yaml`; controller and safety limits are in `my_robot_docking/config/docking_config.yaml`.
+- `my_robot_docking` uses Nav2 to reach a tag-derived predocking point, visually aligns there, drives the tag centerline to staging, then docks.
+- Predocking, staging, and final distances are in `my_robot_docking/config/dock_database.yaml`; controller and safety limits are in `my_robot_docking/config/docking_config.yaml`.
 - `/cmd_vel_dock` has priority over Nav2 through `velocity_arbiter`; stale commands stop at `/cmd_vel_out`.
 - AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical CSI camera.
 - Simulation starts docking from `my_robot_navigation/simulation.launch.py`; hardware bringup starts the CSI camera and AprilTag detector.
@@ -127,7 +127,7 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - The operator app can save stations and reload them through `/docking_server/reload_database` while docking is idle.
 - Tag-not-found/lost retries back up with rear LiDAR safety, rotate, then reacquire the tag locally.
 - Set a dock's `reverse_docking: true` to capture its tag, rotate the final heading by 180 degrees, and back into the same tag-relative position with rear-sector LiDAR safety.
-- Keep `staging_pose` facing the tag; reverse mode changes only the final approach and heading.
+- Predocking and staging face the tag; reverse mode changes only the final approach and heading.
 - The front CSI camera cannot see behind the robot, so reverse mode freezes the tag goal in `odom`; `max_reverse_distance` bounds that non-visual final approach.
 
 # Test coverage planner

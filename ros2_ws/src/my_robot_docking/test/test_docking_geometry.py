@@ -8,7 +8,37 @@ from my_robot_docking.docking_geometry import (
     relative_control_error,
     reverse_target_from_tag,
     scan_sector_clearances,
+    target_pose_from_tag,
 )
+
+
+def test_tag_relative_targets_are_collinear():
+    tag = Pose2D(3.0, 2.0, math.pi / 2.0)
+
+    predocking = target_pose_from_tag(tag, 1.5, 0.0, 0.0)
+    staging = target_pose_from_tag(tag, 1.0, 0.0, 0.0)
+    final = target_pose_from_tag(tag, 0.3, 0.0, 0.0)
+
+    assert predocking.x == pytest.approx(3.0)
+    assert staging.x == pytest.approx(3.0)
+    assert final.x == pytest.approx(3.0)
+    assert predocking.y == pytest.approx(0.5)
+    assert staging.y == pytest.approx(1.0)
+    assert final.y == pytest.approx(1.7)
+    assert predocking.yaw == pytest.approx(math.pi / 2.0)
+
+
+def test_tag_relative_target_applies_lateral_and_yaw_offsets():
+    target = target_pose_from_tag(
+        Pose2D(2.0, 3.0, 0.0),
+        distance=1.0,
+        lateral_offset=0.2,
+        yaw_offset=math.pi / 2.0,
+    )
+
+    assert target.x == pytest.approx(1.8)
+    assert target.y == pytest.approx(2.0)
+    assert target.yaw == pytest.approx(math.pi / 2.0)
 
 
 def test_reverse_target_keeps_forward_position_and_flips_yaw():

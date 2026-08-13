@@ -30,6 +30,7 @@ from my_robot_docking.docking_geometry import (
     relative_control_error,
     reverse_target_from_tag,
     scan_sector_clearances,
+    target_pose_from_tag,
 )
 from my_robot_docking.tag_tracker import TagTracker
 from my_robot_docking_msgs.action import Dock
@@ -71,8 +72,9 @@ class DockingServer(Node):
         self._active_dock_goal = None
         self._active_nav_goal = None
         self._navigation_feedback_valid = False
-        self._staging_acceptance_reached = False
+        self._predocking_acceptance_reached = False
         self._last_navigation_feedback_time = 0.0
+        self._navigation_feedback_state = Dock.Feedback.NAVIGATING
         self._last_odom_received_ns = None
         self._last_scan_received_ns = None
         self._odom_lock = threading.Lock()
@@ -180,7 +182,7 @@ class DockingServer(Node):
             'tag_loss_grace_period': 0.75,
             'tag_search_timeout': 15.0,
             'navigation_timeout': 120.0,
-            'staging_acceptance_distance': 0.2,
+            'predocking_acceptance_distance': 0.2,
             'navigation_feedback_rate': 5.0,
             'approach_timeout': 30.0,
             'verification_duration': 0.3,
@@ -240,7 +242,7 @@ class DockingServer(Node):
             'tag_loss_grace_period',
             'tag_search_timeout',
             'navigation_timeout',
-            'staging_acceptance_distance',
+            'predocking_acceptance_distance',
             'navigation_feedback_rate',
             'approach_timeout',
             'verification_duration',
@@ -289,7 +291,7 @@ class DockingServer(Node):
             'tag_loss_grace_period',
             'tag_search_timeout',
             'navigation_timeout',
-            'staging_acceptance_distance',
+            'predocking_acceptance_distance',
             'navigation_feedback_rate',
             'approach_timeout',
             'verification_duration',
@@ -409,6 +411,7 @@ class DockingServer(Node):
             if (
                 not math.isfinite(request.final_distance)
                 or request.final_distance < self.minimum_tag_distance
+                or request.final_distance >= dock.staging_distance
                 or not math.isfinite(request.lateral_offset)
                 or not math.isfinite(request.yaw_offset)
             ):
@@ -452,15 +455,21 @@ class DockingServer(Node):
                 else dock.yaw_offset
             )
 
+            prepared_at_staging = not request.navigate_to_staging_pose
             if request.navigate_to_staging_pose:
-                navigation = self._navigate_to_staging(goal_handle, dock)
+                navigation = self._navigate_to_predocking(
+                    goal_handle,
+                    dock,
+                    lateral_offset,
+                    yaw_offset,
+                )
                 if navigation == NavigationOutcome.CANCELLED:
                     return self._cancel_result(goal_handle)
                 if navigation != NavigationOutcome.SUCCEEDED:
                     return self._abort_result(
                         goal_handle,
                         Dock.Result.NAVIGATION_FAILED,
-                        'Failed to reach docking staging pose',
+                        'Failed to reach docking predocking pose',
                     )
 
             for attempt in range(self.max_retries + 1):
@@ -481,15 +490,38 @@ class DockingServer(Node):
                         message,
                     )
                 if observation is not None:
-                    outcome, message = self._approach_tag(
-                        goal_handle,
-                        dock,
-                        observation,
-                        final_distance,
-                        lateral_offset,
-                        yaw_offset,
-                        attempt,
-                    )
+                    if not prepared_at_staging:
+                        outcome, message = self._prepare_at_staging(
+                            goal_handle,
+                            dock,
+                            lateral_offset,
+                            yaw_offset,
+                            attempt,
+                        )
+                        if outcome == ApproachOutcome.SUCCEEDED:
+                            prepared_at_staging = True
+                            observation = self.tag_tracker.latest(
+                                dock.tag_id,
+                                dock.tag_frame,
+                            )
+                            if observation is None:
+                                outcome = ApproachOutcome.TAG_LOST
+                                message = f'Lost tag {dock.tag_id}'
+
+                    if (
+                        prepared_at_staging
+                        and observation is not None
+                        and outcome in (None, ApproachOutcome.SUCCEEDED)
+                    ):
+                        outcome, message = self._approach_tag(
+                            goal_handle,
+                            dock,
+                            observation,
+                            final_distance,
+                            lateral_offset,
+                            yaw_offset,
+                            attempt,
+                        )
 
                 if outcome == ApproachOutcome.SUCCEEDED:
                     self._stop_robot()
@@ -557,15 +589,21 @@ class DockingServer(Node):
                     request.navigate_to_staging_pose
                     and self.return_to_staging_on_retry
                 ):
-                    navigation = self._navigate_to_staging(goal_handle, dock)
+                    navigation = self._navigate_to_predocking(
+                        goal_handle,
+                        dock,
+                        lateral_offset,
+                        yaw_offset,
+                    )
                     if navigation == NavigationOutcome.CANCELLED:
                         return self._cancel_result(goal_handle)
                     if navigation != NavigationOutcome.SUCCEEDED:
                         return self._abort_result(
                             goal_handle,
                             Dock.Result.NAVIGATION_FAILED,
-                            'Failed to return to staging pose for retry',
+                            'Failed to return to predocking pose for retry',
                         )
+                    prepared_at_staging = False
 
             return self._abort_result(
                 goal_handle,
@@ -586,12 +624,19 @@ class DockingServer(Node):
             self._active_dock_goal = None
             self._active_nav_goal = None
 
-    def _navigate_to_staging(self, dock_goal, dock):
-        self._publish_feedback(dock_goal, Dock.Feedback.NAVIGATING)
+    def _navigate_to_predocking(
+        self,
+        dock_goal,
+        dock,
+        lateral_offset,
+        yaw_offset,
+    ):
+        self._navigation_feedback_state = Dock.Feedback.NAVIGATING_PREDOCK
+        self._publish_feedback(dock_goal, self._navigation_feedback_state)
         self._stop_robot()
         time.sleep(self.command_timeout + 0.05)
         self._navigation_feedback_valid = False
-        self._staging_acceptance_reached = False
+        self._predocking_acceptance_reached = False
         self._last_navigation_feedback_time = 0.0
 
         if not self.nav_client.wait_for_server(timeout_sec=5.0):
@@ -601,10 +646,20 @@ class DockingServer(Node):
         nav_goal = NavigateToPose.Goal()
         nav_goal.pose.header.frame_id = dock.global_frame
         nav_goal.pose.header.stamp = self.get_clock().now().to_msg()
-        nav_goal.pose.pose.position.x = dock.staging_x
-        nav_goal.pose.pose.position.y = dock.staging_y
-        nav_goal.pose.pose.orientation.z = math.sin(dock.staging_yaw * 0.5)
-        nav_goal.pose.pose.orientation.w = math.cos(dock.staging_yaw * 0.5)
+        predocking_pose = target_pose_from_tag(
+            Pose2D(
+                dock.reference_x,
+                dock.reference_y,
+                dock.reference_yaw,
+            ),
+            dock.predocking_distance,
+            lateral_offset,
+            yaw_offset,
+        )
+        nav_goal.pose.pose.position.x = predocking_pose.x
+        nav_goal.pose.pose.position.y = predocking_pose.y
+        nav_goal.pose.pose.orientation.z = math.sin(predocking_pose.yaw * 0.5)
+        nav_goal.pose.pose.orientation.w = math.cos(predocking_pose.yaw * 0.5)
 
         send_future = self.nav_client.send_goal_async(
             nav_goal,
@@ -637,9 +692,9 @@ class DockingServer(Node):
 
         wrapped_result = result_future.result()
         self._active_nav_goal = None
-        if self._staging_acceptance_reached:
+        if self._predocking_acceptance_reached:
             self.get_logger().info(
-                'Staging acceptance distance reached; switching to visual docking'
+                'Predocking acceptance distance reached; switching to visual alignment'
             )
             return NavigationOutcome.SUCCEEDED
         if wrapped_result.status == GoalStatus.STATUS_SUCCEEDED:
@@ -668,14 +723,14 @@ class DockingServer(Node):
             return
 
         distance = float(message.feedback.distance_remaining)
-        if distance > self.staging_acceptance_distance:
+        if distance > self.predocking_acceptance_distance:
             self._navigation_feedback_valid = True
         if (
             self._navigation_feedback_valid
-            and distance <= self.staging_acceptance_distance
-            and not self._staging_acceptance_reached
+            and distance <= self.predocking_acceptance_distance
+            and not self._predocking_acceptance_reached
         ):
-            self._staging_acceptance_reached = True
+            self._predocking_acceptance_reached = True
             if self._active_nav_goal is not None:
                 self._active_nav_goal.cancel_goal_async()
 
@@ -688,7 +743,7 @@ class DockingServer(Node):
         self._last_navigation_feedback_time = now
         self._publish_feedback(
             goal,
-            Dock.Feedback.NAVIGATING,
+            self._navigation_feedback_state,
             distance=distance,
         )
 
@@ -872,6 +927,46 @@ class DockingServer(Node):
         direction = 1.0 if retry_number % 2 == 1 else -1.0
         return direction * self.retry_rotation_angle
 
+    def _prepare_at_staging(
+        self,
+        goal_handle,
+        dock,
+        lateral_offset,
+        yaw_offset,
+        retries,
+    ):
+        outcome, message = self._approach_forward_target(
+            goal_handle,
+            dock,
+            dock.predocking_distance,
+            lateral_offset,
+            yaw_offset,
+            retries,
+            Dock.Feedback.ALIGNING_PREDOCK,
+            Dock.Feedback.ALIGNING_PREDOCK,
+            'Predocking pose verified',
+            'predocking pose',
+        )
+        if outcome != ApproachOutcome.SUCCEEDED:
+            return outcome, message
+
+        self.get_logger().info(
+            f'Predocking alignment complete for {dock.dock_id}; '
+            'advancing to staging'
+        )
+        return self._approach_forward_target(
+            goal_handle,
+            dock,
+            dock.staging_distance,
+            lateral_offset,
+            yaw_offset,
+            retries,
+            Dock.Feedback.MOVING_TO_STAGING,
+            Dock.Feedback.VERIFYING_STAGING,
+            'Staging pose verified',
+            'staging pose',
+        )
+
     def _approach_tag(
         self,
         goal_handle,
@@ -892,6 +987,34 @@ class DockingServer(Node):
                 yaw_offset,
                 retries,
             )
+
+        return self._approach_forward_target(
+            goal_handle,
+            dock,
+            final_distance,
+            lateral_offset,
+            yaw_offset,
+            retries,
+            None,
+            Dock.Feedback.VERIFYING,
+            'Dock pose verified',
+            'final docking pose',
+        )
+
+    def _approach_forward_target(
+        self,
+        goal_handle,
+        dock,
+        target_distance,
+        lateral_offset,
+        yaw_offset,
+        retries,
+        moving_state,
+        verifying_state,
+        success_message,
+        target_name,
+    ):
+        """Visually servo to one pose on the tag approach centerline."""
 
         deadline = time.monotonic() + self.approach_timeout
         period = 1.0 / self.control_rate
@@ -928,7 +1051,7 @@ class DockingServer(Node):
                 overshot,
             ) = self._compute_command(
                 observation,
-                final_distance,
+                target_distance,
                 lateral_offset,
                 yaw_offset,
             )
@@ -937,7 +1060,7 @@ class DockingServer(Node):
                 self._stop_robot()
                 return (
                     ApproachOutcome.CONTROL_FAILED,
-                    'Robot passed the configured final docking pose',
+                    f'Robot passed the configured {target_name}',
                 )
 
             if reached:
@@ -946,7 +1069,7 @@ class DockingServer(Node):
                     verification_started = time.monotonic()
                 self._publish_feedback(
                     goal_handle,
-                    Dock.Feedback.VERIFYING,
+                    verifying_state,
                     distance_error,
                     lateral_error,
                     yaw_error,
@@ -956,14 +1079,16 @@ class DockingServer(Node):
                     time.monotonic() - verification_started
                     >= self.verification_duration
                 ):
-                    return ApproachOutcome.SUCCEEDED, 'Dock pose verified'
+                    return ApproachOutcome.SUCCEEDED, success_message
             else:
                 verification_started = None
-                state = (
-                    Dock.Feedback.ALIGNING
-                    if distance_error <= self.coarse_approach_distance
-                    else Dock.Feedback.APPROACHING
-                )
+                state = moving_state
+                if state is None:
+                    state = (
+                        Dock.Feedback.ALIGNING
+                        if distance_error <= self.coarse_approach_distance
+                        else Dock.Feedback.APPROACHING
+                    )
                 self._publish_feedback(
                     goal_handle,
                     state,
@@ -977,7 +1102,10 @@ class DockingServer(Node):
             time.sleep(period)
 
         self._stop_robot()
-        return ApproachOutcome.TIMED_OUT, 'Dock approach timed out'
+        return (
+            ApproachOutcome.TIMED_OUT,
+            f'Approach to {target_name} timed out',
+        )
 
     def _approach_reverse(
         self,

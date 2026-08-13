@@ -190,9 +190,10 @@ def _load_database(path: str) -> dict:
         data = yaml.safe_load(fh)
     if not isinstance(data, dict):
         raise ValueError('dock_database.yaml must be a YAML mapping')
-    if data.get('schema_version') != 1:
+    if data.get('schema_version') != 2:
         raise ValueError(
-            f"Unsupported schema_version: {data.get('schema_version')} (expected 1)"
+            f"Unsupported schema_version: {data.get('schema_version')} "
+            '(expected 2)'
         )
     if 'docks' not in data or not isinstance(data['docks'], dict):
         data['docks'] = {}
@@ -206,6 +207,7 @@ def save_dock_entry(
     global_frame: str,
     reference_pose: tuple,
     staging_pose: tuple,
+    predocking_distance: float,
     final_distance: float,
     lateral_offset: float,
     yaw_offset: float,
@@ -236,6 +238,20 @@ def save_dock_entry(
                 "Each dock must have a unique tag_id."
             )
 
+    approach_yaw = reference_pose[2] + yaw_offset
+    tag_delta_x = reference_pose[0] - staging_pose[0]
+    tag_delta_y = reference_pose[1] - staging_pose[1]
+    staging_distance = (
+        tag_delta_x * math.cos(approach_yaw)
+        + tag_delta_y * math.sin(approach_yaw)
+    )
+    if not predocking_distance > staging_distance > final_distance:
+        raise ValueError(
+            'Expected predocking distance > recorded staging distance > '
+            f'final distance, got {predocking_distance:.3f} > '
+            f'{staging_distance:.3f} > {final_distance:.3f}'
+        )
+
     docks[dock_id] = {
         'tag_id': tag_id,
         'tag_frame': f'tag_{tag_id}',
@@ -245,11 +261,8 @@ def save_dock_entry(
             _round3(reference_pose[1]),
             _round3(reference_pose[2]),
         ],
-        'staging_pose': [
-            _round3(staging_pose[0]),
-            _round3(staging_pose[1]),
-            _round3(staging_pose[2]),
-        ],
+        'predocking_distance': _round3(predocking_distance),
+        'staging_distance': _round3(staging_distance),
         'final_distance': final_distance,
         'lateral_offset': lateral_offset,
         'yaw_offset': yaw_offset,
@@ -380,6 +393,7 @@ def _do_save(node, args, robot_pose, tag_pose, tag_age):
             global_frame=args.global_frame,
             reference_pose=tag_pose,
             staging_pose=robot_pose,
+            predocking_distance=args.predocking_distance,
             final_distance=args.final_distance,
             lateral_offset=args.lateral_offset,
             yaw_offset=args.yaw_offset,
@@ -400,15 +414,73 @@ def _do_save(node, args, robot_pose, tag_pose, tag_age):
 
 # ─── Main TUI loop ────────────────────────────────────────────────────────────
 
-BOX_W = 70
-BOX_H = 19
+BOX_W = 72
+BOX_H = 22
+
+_POLL_MS = 50   # 20 Hz refresh rate
+
+
+def _prompt_input(
+    stdscr,
+    prompt: str,
+    initial: str = '',
+    max_len: int = 40,
+    validator=None,
+) -> 'str | None':
+    """
+    Show a single-line inline input prompt at the bottom of the screen.
+
+    Returns the entered string (stripped) on Enter, or None on Escape.
+    *validator* is an optional callable(str) -> bool; if it returns False the
+    field is shown in red and Enter is ignored.
+    """
+    rows, _ = stdscr.getmaxyx()
+    prompt_row = rows - 2
+
+    curses.curs_set(1)
+    stdscr.nodelay(False)
+    stdscr.timeout(-1)
+
+    buf = list(initial)
+
+    while True:
+        stdscr.move(prompt_row, 0)
+        stdscr.clrtoeol()
+        label = f' {prompt}: '
+        _safe_add(stdscr, prompt_row, 0, label,
+                  curses.color_pair(_C_TITLE) | curses.A_BOLD)
+        value = ''.join(buf)
+        valid = validator is None or validator(value)
+        val_attr = (curses.color_pair(_C_OK) if valid
+                    else curses.color_pair(_C_ERR)) | curses.A_BOLD
+        _safe_add(stdscr, prompt_row, len(label), value + '▌', val_attr)
+        stdscr.refresh()
+
+        key = stdscr.getch()
+        if key == 27:                          # Escape — cancel
+            result = None
+            break
+        elif key in (10, 13, curses.KEY_ENTER):  # Enter — confirm
+            if validator is None or validator(''.join(buf)):
+                result = ''.join(buf).strip()
+                break
+        elif key in (curses.KEY_BACKSPACE, 127, 8):
+            if buf:
+                buf.pop()
+        elif 32 <= key < 127 and len(buf) < max_len:
+            buf.append(chr(key))
+
+    curses.curs_set(0)
+    stdscr.nodelay(True)
+    stdscr.timeout(_POLL_MS)
+    return result
 
 
 def _run_tui(stdscr, node, args) -> None:
     _init_colours()
     curses.curs_set(0)
     stdscr.nodelay(True)
-    stdscr.timeout(200)
+    stdscr.timeout(_POLL_MS)
 
     status_text = ''
     status_attr = 0
@@ -459,16 +531,26 @@ def _run_tui(stdscr, node, args) -> None:
         r += 1
         _hline(stdscr, r, bc, BOX_W); r += 1
 
-        # ── Config block ──────────────────────────────────────────────
-        _safe_add(stdscr, r, c, f'Dock ID  : {args.dock_id}',
+        # ── Config block (editable fields highlighted) ────────────────
+        _safe_add(stdscr, r, c, 'Dock ID  : ', curses.color_pair(_C_DIM))
+        _safe_add(stdscr, r, c + 11, args.dock_id,
+                  curses.color_pair(_C_HINT) | curses.A_BOLD)
+        _safe_add(stdscr, r, c + 11 + len(args.dock_id), '  [N]',
                   curses.color_pair(_C_DIM)); r += 1
-        _safe_add(stdscr, r, c, f'Tag ID   : {args.tag_id}  →  tag_{args.tag_id}',
+
+        tag_label = f'{args.tag_id}  →  tag_{args.tag_id}'
+        _safe_add(stdscr, r, c, 'Tag ID   : ', curses.color_pair(_C_DIM))
+        _safe_add(stdscr, r, c + 11, tag_label,
+                  curses.color_pair(_C_HINT) | curses.A_BOLD)
+        _safe_add(stdscr, r, c + 11 + len(tag_label), '  [T]',
                   curses.color_pair(_C_DIM)); r += 1
+
         _safe_add(stdscr, r, c,
                   f'Database : {os.path.basename(args.database)}',
                   curses.color_pair(_C_DIM)); r += 1
         _safe_add(stdscr, r, c,
-                  f'Params   : final_dist={args.final_distance}m  '
+                  f'Params   : predock={args.predocking_distance}m  '
+                  f'final={args.final_distance}m  '
                   f'lat={args.lateral_offset}  yaw={args.yaw_offset}  '
                   f'reverse={args.reverse}',
                   curses.color_pair(_C_DIM)); r += 1
@@ -506,7 +588,7 @@ def _run_tui(stdscr, node, args) -> None:
 
         # ── Keybindings ───────────────────────────────────────────────
         _safe_add(stdscr, r, c,
-                  '[R] Record & Save      [Q] Quit',
+                  '[R] Record & Save   [T] Edit Tag ID   [N] Edit Dock ID   [Q] Quit',
                   curses.A_BOLD); r += 1
 
         # ── Status / last-saved ───────────────────────────────────────
@@ -526,7 +608,38 @@ def _run_tui(stdscr, node, args) -> None:
         if key in (ord('q'), ord('Q')):
             break
 
-        if key in (ord('r'), ord('R')):
+        if key in (ord('t'), ord('T')):
+            new_val = _prompt_input(
+                stdscr,
+                'New Tag ID (integer)',
+                str(args.tag_id),
+                validator=lambda s: s.lstrip('-').isdigit(),
+            )
+            if new_val is not None:
+                try:
+                    new_id = int(new_val)
+                    args.tag_id = new_id
+                    node._args.tag_id = new_id
+                    status_text = f'Tag ID updated → tag_{new_id}'
+                    status_attr = curses.color_pair(_C_OK) | curses.A_BOLD
+                except ValueError:
+                    status_text = f'ERROR: "{new_val}" is not a valid integer'
+                    status_attr = curses.color_pair(_C_ERR) | curses.A_BOLD
+
+        elif key in (ord('n'), ord('N')):
+            new_val = _prompt_input(
+                stdscr,
+                'New Dock ID',
+                args.dock_id,
+                validator=lambda s: bool(s.strip()),
+            )
+            if new_val:
+                args.dock_id = new_val
+                node._args.dock_id = new_val
+                status_text = f'Dock ID updated → "{new_val}"'
+                status_attr = curses.color_pair(_C_OK) | curses.A_BOLD
+
+        elif key in (ord('r'), ord('R')):
             # Re-snapshot at the moment of keypress
             robot_pose = node.get_robot_pose()
             tag_pose   = node.get_tag_pose()
@@ -564,6 +677,8 @@ def _parse_args(argv=None) -> argparse.Namespace:
                    help='AprilTagDetectionArray topic')
     p.add_argument('--final-distance', type=float, default=0.30,
                    help='Stop distance from tag (metres)')
+    p.add_argument('--predocking-distance', type=float, default=1.50,
+                   help='Predocking distance from tag (metres)')
     p.add_argument('--lateral-offset', type=float, default=0.0,
                    help='Side offset from tag centre (metres)')
     p.add_argument('--yaw-offset', type=float, default=0.0,

@@ -9,6 +9,7 @@ import yaml
 class DockDatabaseError(ValueError):
     """Raised when the dock database is invalid."""
 
+
 @dataclass(frozen=True)
 class DockDefinition:
     """A dataclass to hold the definition of a docking station."""
@@ -21,10 +22,8 @@ class DockDefinition:
     reference_y: float
     reference_yaw: float
 
-    staging_x: float
-    staging_y: float
-    staging_yaw: float
-
+    predocking_distance: float
+    staging_distance: float
     final_distance: float
     lateral_offset: float
     yaw_offset: float
@@ -35,7 +34,7 @@ class DockDefinition:
 class DockDatabase:
     """Loads and validates docking station definitions from a YAML file."""
 
-    SUPPORTED_SCHEMA_VERSION = 1
+    SUPPORTED_SCHEMA_VERSION = 2
 
     def __init__(self, database_path):
         self._path = Path(database_path)
@@ -90,7 +89,6 @@ class DockDatabase:
             used_tag_ids.add(definition.tag_id)
             self._docks[dock_id] = definition
 
-
     def _parse_dock(self, dock_id: str, raw_dock: dict) -> DockDefinition:
         if not isinstance(raw_dock, dict):
             raise DockDatabaseError(
@@ -102,7 +100,8 @@ class DockDatabase:
             'tag_frame',
             'global_frame',
             'reference_pose',
-            'staging_pose',
+            'predocking_distance',
+            'staging_distance',
             'final_distance',
             'lateral_offset',
             'yaw_offset',
@@ -120,16 +119,21 @@ class DockDatabase:
             raise DockDatabaseError(
                 f'Dock {dock_id!r} tag_id must be an integer'
             )
-        
+
         reference = self._parse_pose(
             dock_id,
             'reference_pose',
             raw_dock['reference_pose'],
         )
-        staging = self._parse_pose(
+        predocking_distance = self._number(
             dock_id,
-            'staging_pose',
-            raw_dock['staging_pose'],
+            'predocking_distance',
+            raw_dock['predocking_distance'],
+        )
+        staging_distance = self._number(
+            dock_id,
+            'staging_distance',
+            raw_dock['staging_distance'],
         )
         final_distance = self._number(
             dock_id,
@@ -150,6 +154,11 @@ class DockDatabase:
         if final_distance <= 0:
             raise DockDatabaseError(
                 f'Dock {dock_id} final_distance must be positive'
+            )
+        if not predocking_distance > staging_distance > final_distance:
+            raise DockDatabaseError(
+                f'Dock {dock_id} must satisfy predocking_distance > '
+                'staging_distance > final_distance'
             )
         reverse_docking = raw_dock['reverse_docking']
         if not isinstance(reverse_docking, bool):
@@ -172,9 +181,8 @@ class DockDatabase:
             reference_x=reference[0],
             reference_y=reference[1],
             reference_yaw=reference[2],
-            staging_x=staging[0],
-            staging_y=staging[1],
-            staging_yaw=staging[2],
+            predocking_distance=predocking_distance,
+            staging_distance=staging_distance,
             final_distance=final_distance,
             lateral_offset=lateral_offset,
             yaw_offset=yaw_offset,
@@ -192,7 +200,6 @@ class DockDatabase:
             raise DockDatabaseError(
                 f'Unknown dock {dock_id!r}; available docks: {available}'
             ) from error
-
 
     def ids(self):
         """Return all configured dock IDs."""
@@ -218,7 +225,7 @@ class DockDatabase:
             cls._number(dock_id, f'{field}[{index}]', item)
             for index, item in enumerate(value)
         )
-    
+
     @staticmethod
     def _number(dock_id, field, value):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -241,4 +248,3 @@ class DockDatabase:
             )
 
         return value
-    

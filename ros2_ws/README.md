@@ -119,8 +119,8 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 
 # Staging and docking
 - `my_robot_docking` uses Nav2 to reach a tag-derived predocking point, visually aligns there, drives the tag centerline to staging, then docks.
-- Hardware stations are in `dock_database.yaml`; simulation predocking distances are in `sim_dock_database.yaml`.
-- Legacy staging poses derive predocking distance from `legacy_predocking_offset` in `docking_config.yaml`.
+- Hardware schema-2 stations preserve recorded staging poses and explicit predocking distances in `dock_database.yaml`.
+- Simulation tag-relative distances are in `sim_dock_database.yaml`; legacy schema-1 files use `legacy_predocking_offset`.
 - `/cmd_vel_dock` has priority over Nav2 through `velocity_arbiter`; stale commands stop at `/cmd_vel_out`.
 - AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical CSI camera.
 - Simulation starts docking from `my_robot_navigation/simulation.launch.py`; hardware bringup starts the CSI camera and AprilTag detector.

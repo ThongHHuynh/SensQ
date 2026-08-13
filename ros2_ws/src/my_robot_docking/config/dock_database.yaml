@@ -1,34 +1,26 @@
-#version of the database schema. Increment this when making changes to the database format.
-schema_version: 1
+# Real-robot stations preserve recorded map poses and set explicit predocking distances.
+schema_version: 2
 
 docks:
   home_dock:
-    tag_id: 0
-    tag_frame: "tag_0"
-    global_frame: "map"
-
-    # Approximate tag location in map: [x, y, yaw].
-    reference_pose: [3.34689, 0.003265, 0.0]
-
-    # Nav2 goal before visual docking: [x, y, yaw].
-    staging_pose: [2.3, 0.003265, 0.0]
-
-    # Desired base_footprint pose relative to the tag.
-    final_distance: 0.3
-    lateral_offset: 0.0
-    yaw_offset: 0.0
-
-    # true: capture the tag, rotate 180 degrees, then back into this pose.
-    reverse_docking: true
-
-  flex_dock1:
     tag_id: 1
     tag_frame: "tag_1"
     global_frame: "map"
+    reference_pose: [-0.185, -0.188, 1.577]
+    staging_pose: [0.131, -0.196, -3.129]
+    predocking_distance: 0.816101
+    final_distance: 0.2
+    lateral_offset: 0.0
+    yaw_offset: 0.0
+    reverse_docking: false
 
-    reference_pose: [1.0, 5.18213, 1.5708]
-    staging_pose: [1.0, 4.0, 1.5708]
-
+  dock-1:
+    tag_id: 0
+    tag_frame: "tag_0"
+    global_frame: "map"
+    reference_pose: [-0.171, -1.741, 1.488]
+    staging_pose: [0.289, -1.783, 3.057]
+    predocking_distance: 0.961913
     final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0

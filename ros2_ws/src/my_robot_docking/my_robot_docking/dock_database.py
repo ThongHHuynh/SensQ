@@ -115,10 +115,7 @@ class DockDatabase:
         if self._schema_version == 1:
             required_fields.append('staging_pose')
         else:
-            required_fields.extend((
-                'predocking_distance',
-                'staging_distance',
-            ))
+            required_fields.append('predocking_distance')
 
         for field in required_fields:
             if field not in raw_dock:
@@ -137,7 +134,17 @@ class DockDatabase:
             'reference_pose',
             raw_dock['reference_pose'],
         )
-        if self._schema_version == 1:
+        has_staging_pose = 'staging_pose' in raw_dock
+        has_staging_distance = 'staging_distance' in raw_dock
+        if self._schema_version == 2 and (
+            has_staging_pose == has_staging_distance
+        ):
+            raise DockDatabaseError(
+                f'Dock {dock_id} schema 2 must define exactly one of '
+                'staging_pose or staging_distance'
+            )
+
+        if has_staging_pose:
             staging = self._parse_pose(
                 dock_id,
                 'staging_pose',
@@ -147,9 +154,16 @@ class DockDatabase:
             tag_delta_y = reference[1] - staging[1]
             staging_distance = math.hypot(tag_delta_x, tag_delta_y)
             approach_yaw = math.atan2(tag_delta_y, tag_delta_x)
-            predocking_distance = (
-                staging_distance + self._legacy_predocking_offset
-            )
+            if self._schema_version == 1:
+                predocking_distance = (
+                    staging_distance + self._legacy_predocking_offset
+                )
+            else:
+                predocking_distance = self._number(
+                    dock_id,
+                    'predocking_distance',
+                    raw_dock['predocking_distance'],
+                )
         else:
             predocking_distance = self._number(
                 dock_id,

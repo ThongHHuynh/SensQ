@@ -259,13 +259,9 @@ def save_dock_entry(
             _round3(staging_pose[2]),
         ]
     else:
-        approach_yaw = reference_pose[2] + yaw_offset
         tag_delta_x = reference_pose[0] - staging_pose[0]
         tag_delta_y = reference_pose[1] - staging_pose[1]
-        staging_distance = (
-            tag_delta_x * math.cos(approach_yaw)
-            + tag_delta_y * math.sin(approach_yaw)
-        )
+        staging_distance = math.hypot(tag_delta_x, tag_delta_y)
         if not predocking_distance > staging_distance > final_distance:
             raise ValueError(
                 'Expected predocking distance > recorded staging distance > '
@@ -273,7 +269,11 @@ def save_dock_entry(
                 f'{staging_distance:.3f} > {final_distance:.3f}'
             )
         dock_entry['predocking_distance'] = _round3(predocking_distance)
-        dock_entry['staging_distance'] = _round3(staging_distance)
+        dock_entry['staging_pose'] = [
+            _round3(staging_pose[0]),
+            _round3(staging_pose[1]),
+            _round3(staging_pose[2]),
+        ]
 
     docks[dock_id] = dock_entry
 

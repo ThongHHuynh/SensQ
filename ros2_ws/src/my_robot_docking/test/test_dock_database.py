@@ -50,6 +50,29 @@ def write_legacy_database(path):
     )
 
 
+def write_recorded_schema_2_database(path):
+    path.write_text(
+        yaml.safe_dump({
+            'schema_version': 2,
+            'docks': {
+                'recorded_dock': {
+                    'tag_id': 8,
+                    'tag_frame': 'tag_8',
+                    'global_frame': 'map',
+                    'reference_pose': [-0.185, -0.188, 1.577],
+                    'staging_pose': [0.131, -0.196, -3.129],
+                    'predocking_distance': 0.816101,
+                    'final_distance': 0.2,
+                    'lateral_offset': 0.0,
+                    'yaw_offset': 0.0,
+                    'reverse_docking': False,
+                },
+            },
+        }),
+        encoding='utf-8',
+    )
+
+
 def test_loads_ordered_predocking_staging_and_final_distances(tmp_path):
     database_path = tmp_path / 'docks.yaml'
     write_database(database_path)
@@ -74,6 +97,17 @@ def test_derives_predocking_geometry_from_legacy_staging_pose(tmp_path):
     assert dock.staging_distance == pytest.approx(1.0)
     assert dock.predocking_distance == pytest.approx(1.5)
     assert dock.approach_yaw == pytest.approx(0.0)
+
+
+def test_schema_2_preserves_recorded_staging_geometry(tmp_path):
+    database_path = tmp_path / 'recorded_docks.yaml'
+    write_recorded_schema_2_database(database_path)
+
+    dock = DockDatabase(database_path).get('recorded_dock')
+
+    assert dock.staging_distance == pytest.approx(0.3161012496)
+    assert dock.predocking_distance == pytest.approx(0.816101)
+    assert dock.approach_yaw == pytest.approx(3.1162816044)
 
 
 @pytest.mark.parametrize(

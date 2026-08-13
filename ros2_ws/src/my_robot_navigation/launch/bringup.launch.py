@@ -37,6 +37,11 @@ def generate_launch_description():
     robot_bringup_path = get_package_share_path("my_robot_bringup")
     robot_navigation_path = get_package_share_path("my_robot_navigation")
     robot_docking_path = get_package_share_path("my_robot_docking")
+    real_dock_database = os.path.join(
+            robot_docking_path,
+            'config',
+            'dock_database.yaml',
+        )
     
     robot_camera_path = get_package_share_path("csi_camera")
 
@@ -208,6 +213,7 @@ def generate_launch_description():
             "detector_qos": "sensor_data",
             "image_topic": camera_image_topic,
             "camera_info_topic": camera_info_topic,
+            'dock_database_file': real_dock_database,
         }.items(),
     )
 

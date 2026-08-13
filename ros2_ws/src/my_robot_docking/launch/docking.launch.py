@@ -22,11 +22,12 @@ def generate_launch_description():
         'config',
         'apriltag.yaml',
     )
-    database = os.path.join(
+    default_database = os.path.join(
         package_share,
         'config',
         'dock_database.yaml',
     )
+    database = LaunchConfiguration('dock_database_file')
     use_sim_time = LaunchConfiguration('use_sim_time')
     start_apriltag = LaunchConfiguration('start_apriltag')
     detector_qos = LaunchConfiguration('detector_qos')
@@ -38,6 +39,11 @@ def generate_launch_description():
             'use_sim_time',
             default_value='true',
             description='Use the simulation clock.',
+        ),
+        DeclareLaunchArgument(
+            'dock_database_file',
+            default_value=default_database,
+            description='Dock database loaded by the docking server.',
         ),
         DeclareLaunchArgument(
             'start_apriltag',

@@ -16,6 +16,7 @@ docking_server:
     control_rate: 20.0
     max_retries: 3
     return_to_staging_on_retry: false
+    legacy_predocking_offset: 0.50
 
     # Timeouts
     transform_timeout: 0.05

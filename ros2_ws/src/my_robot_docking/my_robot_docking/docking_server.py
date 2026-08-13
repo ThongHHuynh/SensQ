@@ -64,7 +64,10 @@ class DockingServer(Node):
         if not self.dock_database_file:
             raise RuntimeError('dock_database_file parameter is empty')
 
-        self.database = DockDatabase(self.dock_database_file)
+        self.database = DockDatabase(
+            self.dock_database_file,
+            self.legacy_predocking_offset,
+        )
         self.callback_group = ReentrantCallbackGroup()
 
         self._goal_lock = threading.Lock()
@@ -152,7 +155,10 @@ class DockingServer(Node):
                 response.message = 'Cannot reload docks while docking is active'
                 return response
             try:
-                database = DockDatabase(self.dock_database_file)
+                database = DockDatabase(
+                    self.dock_database_file,
+                    self.legacy_predocking_offset,
+                )
             except DockDatabaseError as error:
                 response.success = False
                 response.message = str(error)
@@ -177,6 +183,7 @@ class DockingServer(Node):
             'control_rate': 20.0,
             'max_retries': 3,
             'return_to_staging_on_retry': False,
+            'legacy_predocking_offset': 0.5,
             'transform_timeout': 0.05,
             'tag_timeout': 0.5,
             'tag_loss_grace_period': 0.75,
@@ -237,6 +244,7 @@ class DockingServer(Node):
             'control_rate',
             'max_retries',
             'return_to_staging_on_retry',
+            'legacy_predocking_offset',
             'transform_timeout',
             'tag_timeout',
             'tag_loss_grace_period',
@@ -286,6 +294,7 @@ class DockingServer(Node):
     def _validate_parameters(self):
         positive = (
             'control_rate',
+            'legacy_predocking_offset',
             'transform_timeout',
             'tag_timeout',
             'tag_loss_grace_period',
@@ -650,7 +659,7 @@ class DockingServer(Node):
             Pose2D(
                 dock.reference_x,
                 dock.reference_y,
-                dock.reference_yaw,
+                dock.approach_yaw,
             ),
             dock.predocking_distance,
             lateral_offset,

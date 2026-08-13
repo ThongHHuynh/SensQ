@@ -190,10 +190,10 @@ def _load_database(path: str) -> dict:
         data = yaml.safe_load(fh)
     if not isinstance(data, dict):
         raise ValueError('dock_database.yaml must be a YAML mapping')
-    if data.get('schema_version') != 2:
+    if data.get('schema_version') not in (1, 2):
         raise ValueError(
             f"Unsupported schema_version: {data.get('schema_version')} "
-            '(expected 2)'
+            '(expected 1 or 2)'
         )
     if 'docks' not in data or not isinstance(data['docks'], dict):
         data['docks'] = {}
@@ -238,21 +238,7 @@ def save_dock_entry(
                 "Each dock must have a unique tag_id."
             )
 
-    approach_yaw = reference_pose[2] + yaw_offset
-    tag_delta_x = reference_pose[0] - staging_pose[0]
-    tag_delta_y = reference_pose[1] - staging_pose[1]
-    staging_distance = (
-        tag_delta_x * math.cos(approach_yaw)
-        + tag_delta_y * math.sin(approach_yaw)
-    )
-    if not predocking_distance > staging_distance > final_distance:
-        raise ValueError(
-            'Expected predocking distance > recorded staging distance > '
-            f'final distance, got {predocking_distance:.3f} > '
-            f'{staging_distance:.3f} > {final_distance:.3f}'
-        )
-
-    docks[dock_id] = {
+    dock_entry = {
         'tag_id': tag_id,
         'tag_frame': f'tag_{tag_id}',
         'global_frame': global_frame,
@@ -261,13 +247,35 @@ def save_dock_entry(
             _round3(reference_pose[1]),
             _round3(reference_pose[2]),
         ],
-        'predocking_distance': _round3(predocking_distance),
-        'staging_distance': _round3(staging_distance),
         'final_distance': final_distance,
         'lateral_offset': lateral_offset,
         'yaw_offset': yaw_offset,
         'reverse_docking': reverse_docking,
     }
+    if data['schema_version'] == 1:
+        dock_entry['staging_pose'] = [
+            _round3(staging_pose[0]),
+            _round3(staging_pose[1]),
+            _round3(staging_pose[2]),
+        ]
+    else:
+        approach_yaw = reference_pose[2] + yaw_offset
+        tag_delta_x = reference_pose[0] - staging_pose[0]
+        tag_delta_y = reference_pose[1] - staging_pose[1]
+        staging_distance = (
+            tag_delta_x * math.cos(approach_yaw)
+            + tag_delta_y * math.sin(approach_yaw)
+        )
+        if not predocking_distance > staging_distance > final_distance:
+            raise ValueError(
+                'Expected predocking distance > recorded staging distance > '
+                f'final distance, got {predocking_distance:.3f} > '
+                f'{staging_distance:.3f} > {final_distance:.3f}'
+            )
+        dock_entry['predocking_distance'] = _round3(predocking_distance)
+        dock_entry['staging_distance'] = _round3(staging_distance)
+
+    docks[dock_id] = dock_entry
 
     # Atomic write: temp file → os.replace
     dir_name = os.path.dirname(os.path.abspath(database_path))

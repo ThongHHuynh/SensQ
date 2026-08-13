@@ -33,6 +33,11 @@ def generate_launch_description():
     robot_bringup_path = get_package_share_path('my_robot_bringup')
     robot_navigation_path = get_package_share_path('my_robot_navigation')
     docking_path = get_package_share_path('my_robot_docking')
+    simulation_dock_database = os.path.join(
+        docking_path,
+        'config',
+        'sim_dock_database.yaml',
+    )
 
     urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
     rviz_config_path = os.path.join(robot_navigation_path, 'rviz', 'navigation_config.rviz')
@@ -148,6 +153,7 @@ def generate_launch_description():
             'detector_qos': 'system_default',
             'image_topic': '/camera/color/image_raw',
             'camera_info_topic': '/camera/color/camera_info',
+            'dock_database_file': simulation_dock_database,
         }.items(),
     )
 

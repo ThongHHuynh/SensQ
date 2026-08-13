@@ -21,6 +21,7 @@ class DockDefinition:
     reference_x: float
     reference_y: float
     reference_yaw: float
+    approach_yaw: float
 
     predocking_distance: float
     staging_distance: float
@@ -34,10 +35,15 @@ class DockDefinition:
 class DockDatabase:
     """Loads and validates docking station definitions from a YAML file."""
 
-    SUPPORTED_SCHEMA_VERSION = 2
+    SUPPORTED_SCHEMA_VERSIONS = (1, 2)
 
-    def __init__(self, database_path):
+    def __init__(self, database_path, legacy_predocking_offset=0.5):
         self._path = Path(database_path)
+        self._legacy_predocking_offset = float(legacy_predocking_offset)
+        if self._legacy_predocking_offset <= 0.0:
+            raise DockDatabaseError(
+                'legacy_predocking_offset must be positive'
+            )
         self._docks: Dict[str, DockDefinition] = {}
         self._load()
 
@@ -65,11 +71,12 @@ class DockDatabase:
             )
 
         version = data.get('schema_version')
-        if version != self.SUPPORTED_SCHEMA_VERSION:
+        if version not in self.SUPPORTED_SCHEMA_VERSIONS:
             raise DockDatabaseError(
                 f'Unsupported schema version {version}. '
-                f'Supported version is {self.SUPPORTED_SCHEMA_VERSION}'
+                f'Supported versions are {self.SUPPORTED_SCHEMA_VERSIONS}'
             )
+        self._schema_version = version
 
         raw_docks = data.get('docks')
         if not isinstance(raw_docks, dict) or not raw_docks:
@@ -95,18 +102,23 @@ class DockDatabase:
                 f'Dock {dock_id} must be a dictionary'
             )
 
-        required_fields = (
+        required_fields = [
             'tag_id',
             'tag_frame',
             'global_frame',
             'reference_pose',
-            'predocking_distance',
-            'staging_distance',
             'final_distance',
             'lateral_offset',
             'yaw_offset',
             'reverse_docking',
-        )
+        ]
+        if self._schema_version == 1:
+            required_fields.append('staging_pose')
+        else:
+            required_fields.extend((
+                'predocking_distance',
+                'staging_distance',
+            ))
 
         for field in required_fields:
             if field not in raw_dock:
@@ -125,16 +137,31 @@ class DockDatabase:
             'reference_pose',
             raw_dock['reference_pose'],
         )
-        predocking_distance = self._number(
-            dock_id,
-            'predocking_distance',
-            raw_dock['predocking_distance'],
-        )
-        staging_distance = self._number(
-            dock_id,
-            'staging_distance',
-            raw_dock['staging_distance'],
-        )
+        if self._schema_version == 1:
+            staging = self._parse_pose(
+                dock_id,
+                'staging_pose',
+                raw_dock['staging_pose'],
+            )
+            tag_delta_x = reference[0] - staging[0]
+            tag_delta_y = reference[1] - staging[1]
+            staging_distance = math.hypot(tag_delta_x, tag_delta_y)
+            approach_yaw = math.atan2(tag_delta_y, tag_delta_x)
+            predocking_distance = (
+                staging_distance + self._legacy_predocking_offset
+            )
+        else:
+            predocking_distance = self._number(
+                dock_id,
+                'predocking_distance',
+                raw_dock['predocking_distance'],
+            )
+            staging_distance = self._number(
+                dock_id,
+                'staging_distance',
+                raw_dock['staging_distance'],
+            )
+            approach_yaw = reference[2]
         final_distance = self._number(
             dock_id,
             'final_distance',
@@ -181,6 +208,7 @@ class DockDatabase:
             reference_x=reference[0],
             reference_y=reference[1],
             reference_yaw=reference[2],
+            approach_yaw=approach_yaw,
             predocking_distance=predocking_distance,
             staging_distance=staging_distance,
             final_distance=final_distance,

@@ -205,7 +205,7 @@ ROS responsibilities:
 
 Real robot floor Nav2:
 
-Navigation and coverage are capped at 0.5 m/s; navigation rotates to path heading first.
+Navigation and coverage are capped at 0.5 m/s.
 The base uses 1980 encoder counts/rev and a PWM deadband of 150.
 
 ```bash

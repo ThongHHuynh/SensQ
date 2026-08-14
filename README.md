@@ -205,7 +205,7 @@ ROS responsibilities:
 
 Real robot floor Nav2:
 
-Navigation and coverage travel are capped at 0.7 m/s with matched smoothing.
+Navigation and coverage are capped at 0.5 m/s; navigation rotates to path heading first.
 
 ```bash
 cd /home/tom/SensQ/ros2_ws

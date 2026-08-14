@@ -32,8 +32,8 @@ const int ENCODER2_A = 47; // Right A
 const int ENCODER2_B = 21; // Right B
 
 //Set deadbands
-const int PWM_DEADBAND_LEFT  = 150;
-const int PWM_DEADBAND_RIGHT = 150;
+const int PWM_DEADBAND_LEFT  = 5;
+const int PWM_DEADBAND_RIGHT = 5;
 const double CMD_ZERO_EPS = 0.05;
 
 
@@ -303,8 +303,8 @@ void loop() {
     int pwmL_ = (int)round(clampd(uL, -255.0, 255.0));
     int pwmR_ = (int)round(clampd(uR, -255.0, 255.0));
 
-    int pwmL = applyDeadband(pwmL, cmd_wl, PWM_DEADBAND_LEFT);
-    int pwmR = applyDeadband(pwmR, cmd_wr, PWM_DEADBAND_RIGHT);
+    int pwmL = applyDeadband(pwmL_, cmd_wl, PWM_DEADBAND_LEFT);
+    int pwmR = applyDeadband(pwmR_, cmd_wr, PWM_DEADBAND_RIGHT);
 
 
     

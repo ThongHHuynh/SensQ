@@ -11,7 +11,7 @@
                 <param name="port">${serial_port}</param>
                 <param name="baud">${baud}</param>
                 <param name="timeout_ms">20</param>
-                <param name="counts_per_rev">449</param>
+                <param name="counts_per_rev">1980</param>
                 <!-- <param name="invert_left">true</param>
                 <param name="invert_right">true</param> -->
                 <param name="invert_left_cmd">false</param>

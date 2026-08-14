@@ -206,6 +206,7 @@ ROS responsibilities:
 Real robot floor Nav2:
 
 Navigation and coverage are capped at 0.5 m/s; navigation rotates to path heading first.
+The base uses 1980 encoder counts/rev and a PWM deadband of 150.
 
 ```bash
 cd /home/tom/SensQ/ros2_ws

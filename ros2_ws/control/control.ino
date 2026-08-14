@@ -32,8 +32,8 @@ const int ENCODER2_A = 47; // Right A
 const int ENCODER2_B = 21; // Right B
 
 //Set deadbands
-const int PWM_DEADBAND_LEFT  = 5;
-const int PWM_DEADBAND_RIGHT = 5;
+const int PWM_DEADBAND_LEFT  = 150;
+const int PWM_DEADBAND_RIGHT = 150;
 const double CMD_ZERO_EPS = 0.05;
 
 
@@ -50,7 +50,7 @@ const int pwmFreq = 20000;
 const int pwmResolution = 8;   // 0..255
 
 // ---------- Robot / encoder parameters ----------
-double counts_per_rev = 449;    // MUST match ros2_control param counts_per_rev
+double counts_per_rev = 1980;    // MUST match ros2_control param counts_per_rev
 bool invert_left  = true;         // match ros2_control param invert_left
 bool invert_right = false;         // match ros2_control param invert_right
 // maximum angular speed

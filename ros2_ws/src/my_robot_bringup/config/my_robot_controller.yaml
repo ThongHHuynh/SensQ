@@ -26,12 +26,11 @@ diff_drive_controller: #same with the name above, this is for parameters
     publish_rate: 50.0 #should be double
     use_stamped_vel: false
 
-    linear.x.max_velocity: 2.0
-    linear.x.min_velocity: -2.0
+    linear.x.max_velocity: 0.7
+    linear.x.min_velocity: -0.25
 
-    angular.z.max_velocity: 2.0
-    angular.z.min_velocity: -2.0
-
+    angular.z.max_velocity: 1.0
+    angular.z.min_velocity: -1.0
 
 
 

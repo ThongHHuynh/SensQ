@@ -139,7 +139,7 @@ class DockControllerNode(Node):
         try:
             transform = self.tf_buffer.lookup_transform(
                 self.dock_frame, tag_frame, rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.1),
+                timeout=rclpy.duration.Duration(seconds=0.0),
             )
             self._tag_lost_since = None  # tag is visible
         except (

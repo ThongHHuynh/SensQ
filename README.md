@@ -5,6 +5,7 @@
 SensQ uses a web UI, backend API, database, and ROS 2 robot stack to let users monitor devices, view camera frames, run mapping, save maps, and send navigation commands.
 
 The Docking page selects docks from the ROS database, sends `/dock` goals through FastAPI, streams feedback, and supports cancellation.
+Docking uses event-driven action waits and non-blocking TF queries.
 
 The main rule:
 
@@ -203,6 +204,8 @@ ROS responsibilities:
 - Low-level safety behavior
 
 Real robot floor Nav2:
+
+Navigation and coverage travel are capped at 0.7 m/s with matched smoothing.
 
 ```bash
 cd /home/tom/SensQ/ros2_ws

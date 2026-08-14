@@ -713,17 +713,20 @@ class DockingServer(Node):
         return NavigationOutcome.FAILED
 
     def _wait_for_future(self, future, dock_goal, timeout, cancel_nav=False):
+        completed = threading.Event()
+        future.add_done_callback(lambda _future: completed.set())
         deadline = time.monotonic() + timeout
         while rclpy.ok() and not future.done():
             if dock_goal.is_cancel_requested:
                 if cancel_nav and self._active_nav_goal is not None:
                     self._active_nav_goal.cancel_goal_async()
                 return False
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
                 if cancel_nav and self._active_nav_goal is not None:
                     self._active_nav_goal.cancel_goal_async()
                 return False
-            time.sleep(0.02)
+            completed.wait(timeout=min(remaining, 0.05))
         return future.done()
 
     def _navigation_feedback(self, message):

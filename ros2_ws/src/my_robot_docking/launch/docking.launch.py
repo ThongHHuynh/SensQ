@@ -17,7 +17,7 @@ def generate_launch_description():
         'config',
         'docking_config.yaml',
     )
-    detector_config = os.path.join(
+    default_detector_config = os.path.join(
         package_share,
         'config',
         'apriltag.yaml',
@@ -28,6 +28,7 @@ def generate_launch_description():
         'dock_database.yaml',
     )
     database = LaunchConfiguration('dock_database_file')
+    detector_config = LaunchConfiguration('detector_config_file')
     use_sim_time = LaunchConfiguration('use_sim_time')
     start_apriltag = LaunchConfiguration('start_apriltag')
     detector_qos = LaunchConfiguration('detector_qos')
@@ -44,6 +45,11 @@ def generate_launch_description():
             'dock_database_file',
             default_value=default_database,
             description='Dock database loaded by the docking server.',
+        ),
+        DeclareLaunchArgument(
+            'detector_config_file',
+            default_value=default_detector_config,
+            description='AprilTag detector parameter file.',
         ),
         DeclareLaunchArgument(
             'start_apriltag',

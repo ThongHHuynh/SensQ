@@ -32,6 +32,10 @@ from my_robot_docking.docking_geometry import (
     scan_sector_clearances,
     target_pose_from_tag,
 )
+from my_robot_docking.docking_visualization import (
+    DockingStage,
+    DockingVisualizer,
+)
 from my_robot_docking.tag_tracker import TagTracker
 from my_robot_docking_msgs.action import Dock
 
@@ -82,6 +86,7 @@ class DockingServer(Node):
         self._last_scan_received_ns = None
         self._odom_lock = threading.Lock()
         self._odom_pose = None
+        self._odom_frame_id = 'odom'
         self._front_clearance = math.inf
         self._rear_clearance = math.inf
         self._rotation_clearance = math.inf
@@ -99,6 +104,17 @@ class DockingServer(Node):
             transform_timeout=self.transform_timeout,
             normal_sign=self.tag_normal_sign,
             callback_group=self.callback_group,
+        )
+        self.visualizer = DockingVisualizer(
+            node=self,
+            enabled=self.visualization_enabled,
+            topic=self.visualization_topic,
+            line_width=self.visualization_line_width,
+            minimum_point_distance=(
+                self.visualization_min_point_distance
+            ),
+            publish_rate=self.visualization_publish_rate,
+            maximum_points=self.visualization_maximum_points,
         )
 
         self.cmd_vel_publisher = self.create_publisher(
@@ -189,7 +205,7 @@ class DockingServer(Node):
             'tag_loss_grace_period': 0.75,
             'tag_search_timeout': 15.0,
             'navigation_timeout': 120.0,
-            'predocking_acceptance_distance': 0.2,
+            'predocking_acceptance_distance': 0.25,
             'navigation_feedback_rate': 5.0,
             'approach_timeout': 30.0,
             'verification_duration': 0.3,
@@ -227,6 +243,12 @@ class DockingServer(Node):
             'require_fresh_odometry': True,
             'require_fresh_scan': True,
             'tag_normal_sign': -1.0,
+            'visualization_enabled': True,
+            'visualization_topic': '/docking/markers',
+            'visualization_line_width': 0.03,
+            'visualization_min_point_distance': 0.01,
+            'visualization_publish_rate': 10.0,
+            'visualization_maximum_points': 3000,
         }
         for name, default in declarations.items():
             self.declare_parameter(name, default)
@@ -288,6 +310,12 @@ class DockingServer(Node):
             'require_fresh_odometry',
             'require_fresh_scan',
             'tag_normal_sign',
+            'visualization_enabled',
+            'visualization_topic',
+            'visualization_line_width',
+            'visualization_min_point_distance',
+            'visualization_publish_rate',
+            'visualization_maximum_points',
         ):
             setattr(self, name, self.get_parameter(name).value)
 
@@ -300,7 +328,6 @@ class DockingServer(Node):
             'tag_loss_grace_period',
             'tag_search_timeout',
             'navigation_timeout',
-            'predocking_acceptance_distance',
             'navigation_feedback_rate',
             'approach_timeout',
             'verification_duration',
@@ -331,6 +358,9 @@ class DockingServer(Node):
             'max_reverse_distance',
             'sensor_timeout',
             'command_timeout',
+            'visualization_line_width',
+            'visualization_min_point_distance',
+            'visualization_publish_rate',
         )
         invalid = [name for name in positive if getattr(self, name) <= 0.0]
         if invalid:
@@ -339,6 +369,8 @@ class DockingServer(Node):
             )
         if self.max_retries < 0:
             raise ValueError('max_retries cannot be negative')
+        if self.predocking_acceptance_distance < 0:
+            raise ValueError('predocking_acceptance_distance cannot be negative')
         if self.retry_rotation_angle > math.pi:
             raise ValueError('retry_rotation_angle cannot exceed pi')
         if self.retry_backup_speed > self.max_linear_speed:
@@ -351,6 +383,8 @@ class DockingServer(Node):
             raise ValueError('tag_normal_sign must be non-zero')
         if not math.isfinite(self.scan_forward_angle):
             raise ValueError('scan_forward_angle must be finite')
+        if self.visualization_maximum_points <= 0:
+            raise ValueError('visualization_maximum_points must be positive')
 
     def _odom_callback(self, message):
         position = message.pose.pose.position
@@ -374,7 +408,13 @@ class DockingServer(Node):
             return
         with self._odom_lock:
             self._odom_pose = pose
+            self._odom_frame_id = message.header.frame_id or 'odom'
         self._last_odom_received_ns = self.get_clock().now().nanoseconds
+        self._visualization_call(
+            'append_pose',
+            pose,
+            self._odom_frame_id,
+        )
 
     def _scan_callback(self, message):
         self._front_clearance, self._rear_clearance = scan_sector_clearances(
@@ -401,6 +441,22 @@ class DockingServer(Node):
     def _latest_odom_pose(self):
         with self._odom_lock:
             return self._odom_pose
+
+    def _latest_odom_frame_id(self):
+        with self._odom_lock:
+            return self._odom_frame_id
+
+    def _visualization_call(self, method, *args):
+        visualizer = getattr(self, 'visualizer', None)
+        if visualizer is None:
+            return
+        try:
+            getattr(visualizer, method)(*args)
+        except Exception as error:
+            self.get_logger().warning(
+                f'Docking visualization {method} failed: {error}',
+                throttle_duration_sec=2.0,
+            )
 
     def _goal_callback(self, request):
         try:
@@ -462,6 +518,13 @@ class DockingServer(Node):
                 float(request.yaw_offset)
                 if request.use_offset_override
                 else dock.yaw_offset
+            )
+            self._visualization_call(
+                'begin_goal',
+                dock,
+                final_distance,
+                lateral_offset,
+                yaw_offset,
             )
 
             prepared_at_staging = not request.navigate_to_staging_pose
@@ -542,6 +605,11 @@ class DockingServer(Node):
                         else 'Docked'
                     )
                     result.message = f'{mode} at {dock.dock_id}'
+                    self._visualization_call(
+                        'finish',
+                        True,
+                        result.message,
+                    )
                     goal_handle.succeed()
                     return result
                 if outcome == ApproachOutcome.CANCELLED:
@@ -640,6 +708,10 @@ class DockingServer(Node):
         lateral_offset,
         yaw_offset,
     ):
+        self._visualization_call(
+            'set_stage',
+            DockingStage.NAVIGATION,
+        )
         self._navigation_feedback_state = Dock.Feedback.NAVIGATING_PREDOCK
         self._publish_feedback(dock_goal, self._navigation_feedback_state)
         self._stop_robot()
@@ -735,16 +807,18 @@ class DockingServer(Node):
             return
 
         distance = float(message.feedback.distance_remaining)
-        if distance > self.predocking_acceptance_distance:
-            self._navigation_feedback_valid = True
-        if (
-            self._navigation_feedback_valid
-            and distance <= self.predocking_acceptance_distance
-            and not self._predocking_acceptance_reached
-        ):
-            self._predocking_acceptance_reached = True
-            if self._active_nav_goal is not None:
-                self._active_nav_goal.cancel_goal_async()
+        acceptance_enabled = self.predocking_acceptance_distance > 0.0
+        if acceptance_enabled and math.isfinite(distance):
+            if distance > self.predocking_acceptance_distance:
+                self._navigation_feedback_valid = True
+            if (
+                self._navigation_feedback_valid
+                and distance <= self.predocking_acceptance_distance
+                and not self._predocking_acceptance_reached
+            ):
+                self._predocking_acceptance_reached = True
+                if self._active_nav_goal is not None:
+                    self._active_nav_goal.cancel_goal_async()
 
         now = time.monotonic()
         if (
@@ -760,6 +834,10 @@ class DockingServer(Node):
         )
 
     def _search_for_tag(self, goal_handle, dock, retries):
+        self._visualization_call(
+            'set_stage',
+            DockingStage.PREDOCK_ALIGNMENT,
+        )
         self._publish_feedback(
             goal_handle,
             Dock.Feedback.SEARCHING,
@@ -812,6 +890,8 @@ class DockingServer(Node):
 
     def _recover_for_retry(self, goal_handle, retry_number):
         """Back up and rotate using odometry before another tag search."""
+
+        self._visualization_call('set_stage', DockingStage.RETRY)
 
         period = 1.0 / self.control_rate
         deadline = time.monotonic() + self.retry_recovery_timeout
@@ -947,6 +1027,10 @@ class DockingServer(Node):
         yaw_offset,
         retries,
     ):
+        self._visualization_call(
+            'set_stage',
+            DockingStage.PREDOCK_ALIGNMENT,
+        )
         outcome, message = self._approach_forward_target(
             goal_handle,
             dock,
@@ -965,6 +1049,10 @@ class DockingServer(Node):
         self.get_logger().info(
             f'Predocking alignment complete for {dock.dock_id}; '
             'advancing to staging'
+        )
+        self._visualization_call(
+            'set_stage',
+            DockingStage.STAGING_APPROACH,
         )
         return self._approach_forward_target(
             goal_handle,
@@ -990,6 +1078,10 @@ class DockingServer(Node):
         retries,
     ):
         if dock.reverse_docking:
+            self._visualization_call(
+                'set_stage',
+                DockingStage.REVERSE_FINAL,
+            )
             return self._approach_reverse(
                 goal_handle,
                 dock,
@@ -1000,6 +1092,10 @@ class DockingServer(Node):
                 retries,
             )
 
+        self._visualization_call(
+            'set_stage',
+            DockingStage.FINAL_APPROACH,
+        )
         return self._approach_forward_target(
             goal_handle,
             dock,
@@ -1045,6 +1141,21 @@ class DockingServer(Node):
                 time.sleep(period)
                 continue
             last_tag_seen = time.monotonic()
+            live_target = target_pose_from_tag(
+                Pose2D(
+                    observation.x,
+                    observation.y,
+                    observation.normal_yaw,
+                ),
+                target_distance,
+                lateral_offset,
+                yaw_offset,
+            )
+            self._visualization_call(
+                'update_live_target',
+                live_target,
+                self.base_frame,
+            )
 
             safety = self._safety_reason(
                 math.hypot(observation.x, observation.y),
@@ -1144,6 +1255,12 @@ class DockingServer(Node):
             lateral_offset,
             yaw_offset,
         )
+        self._visualization_call(
+            'update_live_target',
+            target.base_pose,
+            self._latest_odom_frame_id(),
+            robot_pose,
+        )
         initial_error = relative_control_error(
             robot_pose,
             target.base_pose,
@@ -1183,6 +1300,12 @@ class DockingServer(Node):
                     ApproachOutcome.SAFETY_STOP,
                     'Odometry pose is unavailable',
                 )
+            self._visualization_call(
+                'update_live_target',
+                target.base_pose,
+                self._latest_odom_frame_id(),
+                robot_pose,
+            )
 
             tag_distance = math.hypot(
                 target.tag_x - robot_pose.x,
@@ -1369,6 +1492,9 @@ class DockingServer(Node):
         lateral_error = target_y
         yaw_error = desired_yaw
         heading_error = math.atan2(target_y, target_x)
+        longitudinal_error = (
+            target_x * direction_x + target_y * direction_y
+        )
 
         reached = (
             distance_error <= self.distance_tolerance
@@ -1376,7 +1502,7 @@ class DockingServer(Node):
             and abs(yaw_error) <= self.yaw_tolerance
         )
         overshot = (
-            target_x < -max(self.distance_tolerance, 0.03)
+            longitudinal_error < -max(self.distance_tolerance, 0.03)
             and distance_error > self.distance_tolerance
         )
 
@@ -1507,6 +1633,7 @@ class DockingServer(Node):
 
     def _abort_result(self, goal_handle, error_code, message):
         self._stop_robot()
+        self._visualization_call('finish', False, message)
         result = Dock.Result()
         result.success = False
         result.error_code = int(error_code)
@@ -1517,6 +1644,7 @@ class DockingServer(Node):
 
     def _cancel_result(self, goal_handle):
         self._stop_robot()
+        self._visualization_call('finish', False, 'Docking cancelled')
         result = Dock.Result()
         result.success = False
         result.error_code = Dock.Result.CANCELLED

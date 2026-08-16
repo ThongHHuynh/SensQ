@@ -83,7 +83,8 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - DWB is tuned for faster coverage travel with straight tracking, no waypoint wait, and quick in-place turns.
 - Entry navigation uses DWB; complete coverage-cell paths use bounded-search
   Regulated Pure Pursuit.
-- NavigateToPose counts rotational progress, permits faster smoothed turns, and waits 1 s during BT recovery.
+- NavigateToPose smooths NavFn paths before DWB tracking; NavFn remains in Dijkstra mode.
+- NavigateToPose counts rotational progress and waits 1 s during BT recovery.
 
 # Simulation IMU
 - `simulation.launch.py` fuses `/imu` and wheel odometry using `simulation-ekf.yaml`.
@@ -123,13 +124,17 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - Simulation tag-relative distances are in `sim_dock_database.yaml`; legacy schema-1 files use `legacy_predocking_offset`.
 - `/cmd_vel_dock` has priority over Nav2 through `velocity_arbiter`; stale commands stop at `/cmd_vel_out`.
 - AprilTag uses Reliable camera QoS in Gazebo and Sensor Data QoS with the physical CSI camera.
+- Simulation uses `apriltag_sim.yaml` at 0.15 m; hardware uses `apriltag.yaml` at 0.13 m.
 - Simulation starts docking from `my_robot_navigation/simulation.launch.py`; hardware bringup starts the CSI camera and AprilTag detector.
 - Trigger: `ros2 action send_goal /dock my_robot_docking_msgs/action/Dock "{dock_id: home_dock, navigate_to_staging_pose: true, use_offset_override: false}" --feedback`.
 - The operator app can save stations and reload them through `/docking_server/reload_database` while docking is idle.
 - Tag-not-found/lost retries back up with rear LiDAR safety, rotate, then reacquire the tag locally.
 - Set a dock's `reverse_docking: true` to capture its tag, rotate the final heading by 180 degrees, and back into the same tag-relative position with rear-sector LiDAR safety.
 - Predocking and staging face the tag; reverse mode changes only the final approach and heading.
+- Nav2 hands off the final 0.25 m of predock travel to AprilTag visual alignment.
+- Predock overshoot is measured along the tag approach axis, so heading error triggers alignment instead of a false abort.
 - The front CSI camera cannot see behind the robot, so reverse mode freezes the tag goal in `odom`; `max_reverse_distance` bounds that non-visual final approach.
+- RViz `/docking/markers` shows yellow navigation, cyan predock alignment, blue staging, orange forward final, magenta reverse final, and gray retry trails.
 
 # Test coverage planner
 - `test_coverage` plans optimized Boustrophedon sweeps with smooth headlands and safe, corner-segmented inter-cell transits.

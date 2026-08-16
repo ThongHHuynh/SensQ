@@ -38,6 +38,11 @@ def generate_launch_description():
         'config',
         'sim_dock_database.yaml',
     )
+    simulation_detector_config = os.path.join(
+        docking_path,
+        'config',
+        'apriltag_sim.yaml',
+    )
 
     urdf_path = os.path.join(robot_description_path, 'urdf', 'my_robot.urdf.xacro')
     rviz_config_path = os.path.join(robot_navigation_path, 'rviz', 'navigation_config.rviz')
@@ -154,6 +159,7 @@ def generate_launch_description():
             'image_topic': '/camera/color/image_raw',
             'camera_info_topic': '/camera/color/camera_info',
             'dock_database_file': simulation_dock_database,
+            'detector_config_file': simulation_detector_config,
         }.items(),
     )
 

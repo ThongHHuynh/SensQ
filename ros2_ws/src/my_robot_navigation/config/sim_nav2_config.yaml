@@ -138,13 +138,13 @@ controller_server:
     general_goal_checker:
       plugin: nav2_controller::SimpleGoalChecker
       stateful: true
-      xy_goal_tolerance: 0.1
-      yaw_goal_tolerance: 0.5
+      xy_goal_tolerance: 0.08  # tightened for docking predock precision (was 0.1)
+      yaw_goal_tolerance: 0.1  # tightened for docking predock precision (was 0.5)
 
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
 
-      xy_goal_tolerance: 0.1
+      xy_goal_tolerance: 0.03  # tightened for docking predock precision (was 0.1)
       min_vel_x: 0.0
       max_vel_x: 0.20
       max_vel_y: 0.0
@@ -224,8 +224,8 @@ local_costmap:
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 10.0
-        inflation_radius: 0.20
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.30
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -282,8 +282,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.25
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.30
       always_send_full_costmap: True
 
 map_server:
@@ -316,9 +316,11 @@ smoother_server:
     smoother_plugins: [simple_smoother]
     simple_smoother:
       plugin: nav2_smoother::SimpleSmoother
-      tolerance: 1.0e-10
+      tolerance: 1.0e-6
       max_its: 1000
       do_refinement: true
+      w_data: 0.2
+      w_smooth: 0.3
 
 behavior_server:
   ros__parameters:

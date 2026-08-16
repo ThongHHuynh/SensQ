@@ -23,7 +23,8 @@ docking_server:
     tag_loss_grace_period: 0.75
     tag_search_timeout: 15.0
     navigation_timeout: 120.0
-    predocking_acceptance_distance: 0.20
+    # Hand off before DWB's observed near-goal progress plateau (~0.21 m).
+    predocking_acceptance_distance: 0.1  # 0 disables early visual handoff
     navigation_feedback_rate: 5.0
     approach_timeout: 30.0
     verification_duration: 0.30
@@ -35,7 +36,7 @@ docking_server:
     # Retry recovery
     retry_backup_distance: 0.20  # metres
     retry_backup_speed: 0.1
-    retry_rotation_angle: 0.35  # radians
+    retry_rotation_angle: 1.57  # radians
     retry_rotation_speed: 0.20  # radians/second
     retry_recovery_timeout: 10.0  # seconds
     rotation_stop_distance: 0.30  # footprint radius plus safety margin
@@ -77,6 +78,14 @@ docking_server:
     require_fresh_odometry: true
     require_fresh_scan: true
     tag_normal_sign: -1.0
+
+    # RViz reference targets and stage-colored executed trails
+    visualization_enabled: true
+    visualization_topic: /docking/markers
+    visualization_line_width: 0.03
+    visualization_min_point_distance: 0.01
+    visualization_publish_rate: 10.0
+    visualization_maximum_points: 3000
 
     # The launch file should override this with the installed database path.
     dock_database_file: ""

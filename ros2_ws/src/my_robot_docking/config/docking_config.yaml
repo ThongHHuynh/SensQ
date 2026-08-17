@@ -24,7 +24,7 @@ docking_server:
     tag_search_timeout: 15.0
     navigation_timeout: 120.0
     # Hand off before DWB's observed near-goal progress plateau (~0.21 m).
-    predocking_acceptance_distance: 0.1  # 0 disables early visual handoff
+    predocking_acceptance_distance: 0.2  # 0 disables early visual handoff
     navigation_feedback_rate: 5.0
     approach_timeout: 30.0
     verification_duration: 0.30

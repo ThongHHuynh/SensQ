@@ -688,7 +688,7 @@ class DockingServer(Node):
                 'Docking ended unexpectedly',
             )
         except Exception as error:  # Keep the action from leaving motion active.
-            self.get_logger().exception(f'Docking failed: {error}')
+            self.get_logger().error(f'Docking failed: {error}')
             return self._abort_result(
                 goal_handle,
                 Dock.Result.CONTROL_FAILED,

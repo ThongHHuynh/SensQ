@@ -8,7 +8,7 @@ docks:
     global_frame: "map"
     reference_pose: [3.34689, 0.003265, 0.0]
     predocking_distance: 1.5
-    staging_distance: 1.0
+    staging_distance: 0.75
     final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0
@@ -20,7 +20,7 @@ docks:
     global_frame: "map"
     reference_pose: [1.0, 5.18213, 1.5708]
     predocking_distance: 1.5
-    staging_distance: 1.0
+    staging_distance: 0.75
     final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0

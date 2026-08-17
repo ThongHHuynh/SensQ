@@ -9,7 +9,6 @@ Panels:
         - /Path1
         - /Path2
         - /Camera1
-        - /Camera1/Status1
         - /Camera1/Topic1
         - /Image1
         - /Image1/Topic1
@@ -149,6 +148,10 @@ Visualization Manager:
           Value: true
         right_wheel_link:
           Value: true
+        tag_0:
+          Value: true
+        tag_1:
+          Value: true
       Marker Scale: 0.699999988079071
       Name: TF
       Show Arrows: true
@@ -161,7 +164,10 @@ Visualization Manager:
               base_link:
                 camera_link:
                   camera_optical_frame:
-                    {}
+                    tag_0:
+                      {}
+                    tag_1:
+                      {}
                 caster_wheel_link:
                   {}
                 imu_link:
@@ -288,7 +294,18 @@ Visualization Manager:
       Enabled: true
       Name: Docking Stages
       Namespaces:
-        {}
+        actual/final_approach: true
+        actual/navigation: true
+        actual/predock_alignment: true
+        actual/staging_approach: true
+        current: true
+        live: true
+        reference/final: true
+        reference/labels: true
+        reference/poses: true
+        reference/staging: true
+        reference/tag: true
+        status: true
       Topic:
         Depth: 1
         Durability Policy: Transient Local
@@ -378,6 +395,7 @@ Visualization Manager:
         Value: /camera/image_raw
       Value: false
       Visibility:
+        Docking Stages: true
         Grid: true
         Image: true
         Map: true
@@ -401,7 +419,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /camera/image_raw
+        Value: /camera/color/image_raw
       Value: true
   Enabled: true
   Global Options:
@@ -449,16 +467,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 12.25175666809082
+      Distance: 3.4602456092834473
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.636391520500183
-        Y: 0.33497971296310425
-        Z: 0.5951868295669556
+        X: 2.047658920288086
+        Y: 1.3167120218276978
+        Z: 0.7066808342933655
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -490,4 +508,4 @@ Window Geometry:
     collapsed: true
   Width: 1200
   X: 119
-  Y: 27
+  Y: 240

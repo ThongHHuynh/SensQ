@@ -144,14 +144,14 @@ controller_server:
     FollowPath:
       plugin: dwb_core::DWBLocalPlanner
 
-      xy_goal_tolerance: 0.08
+      xy_goal_tolerance: 0.08  # tightened for docking predock precision (was 0.1)
       min_vel_x: 0.0
-      max_vel_x: 0.20
+      max_vel_x: 0.80
       max_vel_y: 0.0
       max_vel_theta: 1.5
 
       min_speed_xy: 0.0
-      max_speed_xy: 0.40
+      max_speed_xy: 0.80
       min_speed_theta: 0.0
 
       acc_lim_x: 0.5
@@ -173,16 +173,16 @@ controller_server:
       critics: [RotateToGoal, Oscillation, BaseObstacle, GoalAlign, PathAlign, PathDist, GoalDist]
       BaseObstacle.scale: 0.01
 
-      PathAlign.scale: 42.0
+      PathAlign.scale: 24.0
       PathAlign.forward_point_distance: 0.10
-      PathDist.scale: 64.0
+      PathDist.scale: 32.0
 
-      GoalAlign.scale: 6.0
+      GoalAlign.scale: 20.0
       GoalAlign.forward_point_distance: 0.05
-      GoalDist.scale: 8.0
+      GoalDist.scale: 24.0
 
-      RotateToGoal.scale: 12.0
-      RotateToGoal.slowing_factor: 5.0
+      RotateToGoal.scale: 32.0
+      RotateToGoal.slowing_factor: 2.0
       RotateToGoal.lookahead_time: -1.0
 
     CoveragePath:

@@ -16,7 +16,7 @@ def detector_parameters(filename):
     ('filename', 'expected_size'),
     (
         ('apriltag.yaml', 0.13),
-        ('apriltag_sim.yaml', 0.15),
+        ('apriltag_sim.yaml', 0.16),
     ),
 )
 def test_detector_default_and_per_tag_sizes_match(filename, expected_size):

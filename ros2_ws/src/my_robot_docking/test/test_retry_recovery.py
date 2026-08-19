@@ -28,7 +28,7 @@ def make_server(poses):
     server.yaw_tolerance = 0.08
     server.heading_kp = 1.20
     server._rear_clearance = math.inf
-    server._rotation_clearance = math.inf
+    server._rotation_clearance = lambda exclude_bearing=None: math.inf
     server._sensor_safety_reason = lambda require_scan=True: None
     server._publish_feedback = lambda *args, **kwargs: None
     server._stop_robot = lambda: None
@@ -87,10 +87,10 @@ def test_retry_recovery_stops_for_rear_obstacle(monkeypatch):
     assert commands == []
 
 
-def test_rotation_safety_checks_full_scan_clearance():
+def test_rotation_safety_checks_swept_clearance():
     server = DockingServer.__new__(DockingServer)
     server.rotation_stop_distance = 0.30
-    server._rotation_clearance = 0.20
+    server._rotation_clearance = lambda exclude_bearing=None: 0.20
     server._rear_clearance = math.inf
     server.rear_stop_distance = 0.18
     server._sensor_safety_reason = lambda require_scan=True: None

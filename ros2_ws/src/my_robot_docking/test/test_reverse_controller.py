@@ -1,91 +1,123 @@
+"""Corridor approach behaviour when the robot backs into the dock."""
+
 import math
 
 import pytest
 
-from my_robot_docking.docking_geometry import (
-    Pose2D,
-    relative_control_error,
+from my_robot_docking.approach_controller import ApproachState
+from my_robot_docking.docking_geometry import Pose2D
+
+from test_forward_controller import (
+    ENTRY_DISTANCE,
+    FINAL_DISTANCE,
+    TAG,
+    make_controller,
 )
-from my_robot_docking.docking_server import DockingServer
 
 
-def make_server():
-    """Create only the state needed by the pure controller method."""
-
-    server = DockingServer.__new__(DockingServer)
-    server.distance_tolerance = 0.03
-    server.lateral_tolerance = 0.03
-    server.yaw_tolerance = 0.08
-    server.rotate_in_place_threshold = 0.35
-    server.max_linear_speed = 0.10
-    server.max_angular_speed = 0.40
-    server.coarse_approach_distance = 0.70
-    server.distance_kp = 0.40
-    server.heading_kp = 1.20
-    server.lateral_kp = 0.80
-    server.yaw_kp = 0.60
-    return server
+def reverse_controller(**overrides):
+    return make_controller(reverse=True, **overrides)
 
 
-def reverse_error(robot_pose, target_pose):
-    return relative_control_error(robot_pose, target_pose, reverse=True)
+def test_reverse_align_turns_the_rear_toward_the_dock():
+    """Arriving nose-first, the half turn is what ALIGN exists to do."""
+
+    controller = reverse_controller()
+
+    # On the axis, facing the tag: the robot must end up facing away from it.
+    update = controller.update(Pose2D(1.0, 0.0, math.pi), tag_fresh=True)
+
+    assert update.state == ApproachState.ALIGN
+    assert update.linear == pytest.approx(0.0)
+    assert abs(update.angular) > 0.0
 
 
-def test_reverse_command_drives_backward_when_aligned():
-    server = make_server()
-    error = reverse_error(
-        Pose2D(0.0, 0.0, 0.0),
-        Pose2D(-1.0, 0.0, 0.0),
+def test_reverse_run_drives_backward_down_the_axis():
+    controller = reverse_controller()
+
+    # Aligned for backing in: rear points along the axis toward the tag.
+    update = controller.update(Pose2D(1.0, 0.0, 0.0), tag_fresh=False)
+
+    assert update.state == ApproachState.RUN
+    assert update.linear < 0.0
+    assert update.angular == pytest.approx(0.0, abs=1e-9)
+    assert update.error.along == pytest.approx(0.70, abs=1e-6)
+
+
+def test_reverse_cross_track_steers_the_rear_back_onto_the_axis():
+    """Backing up inverts the steering sign: the rear leads, not the nose."""
+
+    controller = reverse_controller()
+
+    update = controller.update(Pose2D(1.0, 0.05, 0.0), tag_fresh=False)
+    mirrored = reverse_controller().update(
+        Pose2D(1.0, -0.05, 0.0),
+        tag_fresh=False,
     )
 
-    command, reached, overshot = server._compute_reverse_command(error)
+    assert update.state == ApproachState.RUN
+    assert update.linear < 0.0
+    assert update.error.cross == pytest.approx(0.05, abs=1e-6)
+    # Turning counter-clockwise swings the nose to +y and so the rear to -y,
+    # which is the direction that closes a positive cross-track error.
+    assert update.angular > 0.0
+    assert mirrored.angular == pytest.approx(-update.angular)
 
-    assert command.linear.x < 0.0
-    assert command.angular.z == pytest.approx(0.0)
-    assert not reached
-    assert not overshot
+
+def test_reverse_run_does_not_require_the_tag():
+    """The camera looks forward, so backing in is odometry-guided by design."""
+
+    controller = reverse_controller()
+    controller.update(Pose2D(1.0, 0.0, 0.0), tag_fresh=False)
+
+    assert controller.state == ApproachState.RUN
+    assert not controller.requires_tag
 
 
-def test_reverse_command_steers_correctly_toward_behind_left_target():
-    server = make_server()
-    error = reverse_error(
-        Pose2D(0.0, 0.0, 0.0),
-        Pose2D(-1.0, 0.20, 0.0),
+def test_reverse_reaches_the_docked_pose():
+    controller = reverse_controller()
+
+    update = controller.update(Pose2D(FINAL_DISTANCE, 0.0, 0.0), tag_fresh=False)
+
+    assert update.reached
+    assert update.linear == pytest.approx(0.0)
+    assert update.angular == pytest.approx(0.0)
+
+
+def test_reverse_ninety_degree_start_enters_the_corridor_nose_first():
+    """Entry legs always drive forward so the tag stays in frame as long as
+    possible; only the last stretch is blind."""
+
+    controller = reverse_controller()
+
+    update = controller.update(Pose2D(0.0, -1.5, math.pi / 2.0), tag_fresh=True)
+
+    assert update.state == ApproachState.ENTER_TURN
+    assert not update.overshot
+    assert update.waypoint.x == pytest.approx(ENTRY_DISTANCE, abs=1e-6)
+
+
+def test_reverse_entry_distance_bounds_the_blind_leg():
+    """The blind rear-first stretch is entry minus final, nothing more."""
+
+    controller = reverse_controller()
+    controller.update(Pose2D(ENTRY_DISTANCE, 0.0, 0.0), tag_fresh=False)
+
+    assert controller.state == ApproachState.RUN
+    goal = controller.goal_pose()
+    assert math.hypot(goal.x - ENTRY_DISTANCE, goal.y) == pytest.approx(
+        ENTRY_DISTANCE - FINAL_DISTANCE,
+        abs=1e-6,
     )
 
-    command, reached, overshot = server._compute_reverse_command(error)
 
-    assert command.linear.x < 0.0
-    assert command.angular.z < 0.0
-    assert not reached
-    assert not overshot
+def test_reverse_goal_pose_faces_away_from_the_tag():
+    controller = reverse_controller()
+    controller.anchor(TAG)
 
+    goal = controller.goal_pose()
 
-def test_reverse_command_stops_when_target_is_reached():
-    server = make_server()
-    error = reverse_error(
-        Pose2D(0.75, 0.0, math.pi),
-        Pose2D(0.75, 0.0, math.pi),
-    )
-
-    command, reached, overshot = server._compute_reverse_command(error)
-
-    assert command.linear.x == pytest.approx(0.0)
-    assert command.angular.z == pytest.approx(0.0)
-    assert reached
-    assert not overshot
-
-
-def test_reverse_command_stops_after_passing_target():
-    server = make_server()
-    error = reverse_error(
-        Pose2D(0.80, 0.0, math.pi),
-        Pose2D(0.75, 0.0, math.pi),
-    )
-
-    command, reached, overshot = server._compute_reverse_command(error)
-
-    assert command.linear.x == pytest.approx(0.0)
-    assert command.angular.z == pytest.approx(0.0)
-    assert not reached
-    assert overshot
+    assert goal.x == pytest.approx(FINAL_DISTANCE, abs=1e-6)
+    assert goal.y == pytest.approx(0.0, abs=1e-6)
+    # The tag normal is pi; backing in means holding the opposite heading.
+    assert goal.yaw == pytest.approx(0.0, abs=1e-6)

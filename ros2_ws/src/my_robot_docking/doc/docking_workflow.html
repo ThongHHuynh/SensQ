@@ -1,0 +1,1251 @@
+<title>Corridor Docking</title>
+<meta name="description" content="How my_robot_docking gets a differential-drive robot onto an AprilTag dock.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:   #F4F7F7;
+    --surface:  #FFFFFF;
+    --sunken:   #EAEFEF;
+    --ink:      #16232A;
+    --muted:    #5B6C73;
+    --faint:    #8A9AA0;
+    --rule:     #D2DBDD;
+    --rule-firm:#B6C3C6;
+    --axis:     #B4690E;
+    --axis-soft:#F0E2CE;
+    --fault:    #A32E2E;
+    --fault-soft:#F5E2E0;
+
+    --measure: 68ch;
+    --plate: 1000px;
+
+    --step--1: 0.815rem;
+    --step-0:  1.0rem;
+    --step-1:  1.24rem;
+    --step-2:  1.6rem;
+    --step-3:  2.1rem;
+    --step-4:  3.1rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0F1619;
+      --surface:  #172025;
+      --sunken:   #121A1E;
+      --ink:      #E2EAEC;
+      --muted:    #93A5AB;
+      --faint:    #6E8189;
+      --rule:     #283740;
+      --rule-firm:#3A4C55;
+      --axis:     #E3A55C;
+      --axis-soft:#3A2E1E;
+      --fault:    #E58A80;
+      --fault-soft:#3A2220;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:   #0F1619;
+    --surface:  #172025;
+    --sunken:   #121A1E;
+    --ink:      #E2EAEC;
+    --muted:    #93A5AB;
+    --faint:    #6E8189;
+    --rule:     #283740;
+    --rule-firm:#3A4C55;
+    --axis:     #E3A55C;
+    --axis-soft:#3A2E1E;
+    --fault:    #E58A80;
+    --fault-soft:#3A2220;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: var(--step-0);
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--plate);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3.25rem;
+  }
+
+  .col {
+    max-width: var(--measure);
+    display: flex;
+    flex-direction: column;
+    gap: 1.05rem;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    line-height: 1.12;
+    text-wrap: balance;
+    margin: 0;
+    letter-spacing: -0.018em;
+  }
+
+  h1 { font-size: var(--step-4); letter-spacing: -0.032em; }
+  h2 { font-size: var(--step-2); }
+  h3 { font-size: var(--step-1); font-weight: 600; }
+  h4 {
+    font-size: var(--step--1);
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  p { margin: 0; }
+  a { color: var(--axis); text-underline-offset: 0.18em; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--axis);
+    outline-offset: 3px;
+  }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.86em;
+    font-variant-ligatures: none;
+  }
+
+  code {
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 0.06em 0.34em;
+    white-space: nowrap;
+  }
+
+  /* ---- masthead ---- */
+
+  header.masthead {
+    padding: 4.5rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    max-width: var(--measure);
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--axis);
+    display: flex;
+    gap: 0.7rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .eyebrow .sep { color: var(--faint); }
+
+  .standfirst {
+    font-size: var(--step-1);
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .keyfacts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0;
+    border-top: 2px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    max-width: var(--plate);
+  }
+  .keyfacts div {
+    padding: 0.85rem 1rem 0.95rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .keyfacts dt, .keyfacts .k {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  .keyfacts .v {
+    font-family: Archivo, sans-serif;
+    font-size: var(--step-1);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- sections ---- */
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    scroll-margin-top: 1rem;
+  }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.9rem;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 0.5rem;
+    max-width: var(--plate);
+  }
+  .sec-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    font-weight: 600;
+    color: var(--axis);
+    font-variant-numeric: tabular-nums;
+  }
+
+  ul, ol { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  li::marker { color: var(--faint); }
+
+  /* ---- figures ---- */
+
+  figure {
+    margin: 0;
+    max-width: var(--plate);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .plate {
+    background: var(--surface);
+    border: 1px solid var(--rule-firm);
+    padding: 1.5rem 1.25rem;
+    overflow-x: auto;
+  }
+  .plate svg {
+    display: block;
+    width: 100%;
+    min-width: 560px;
+    max-width: 100%;
+    height: auto;
+    color: var(--ink);
+  }
+  figcaption {
+    border-left: 1px solid var(--rule-firm);
+    border-right: 1px solid var(--rule-firm);
+    border-bottom: 1px solid var(--rule-firm);
+    background: var(--sunken);
+    padding: 0.7rem 1rem 0.8rem;
+    font-size: var(--step--1);
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  figcaption b {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: 0.04em;
+    margin-right: 0.45rem;
+  }
+
+  /* svg helper classes */
+  .s-box  { fill: var(--surface); stroke: currentColor; stroke-width: 1.4; }
+  .s-sunk { fill: var(--sunken);  stroke: currentColor; stroke-width: 1.2; }
+  .s-dash { fill: none; stroke: currentColor; stroke-width: 1.3; stroke-dasharray: 5 4; }
+  .s-line { fill: none; stroke: currentColor; stroke-width: 1.4; }
+  .s-thin { fill: none; stroke: currentColor; stroke-width: 1; opacity: 0.55; }
+  .s-t    { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; fill: currentColor; }
+  .s-t-sm { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; fill: currentColor; opacity: 0.72; }
+  .s-t-bd { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; font-weight: 600; fill: currentColor; }
+  .s-ax   { stroke: var(--axis); fill: none; }
+  .s-ax-t { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; font-weight: 600; fill: var(--axis); }
+  .s-fa   { stroke: var(--fault); fill: none; }
+  .s-fa-t { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; font-weight: 600; fill: var(--fault); }
+
+  /* ---- tables ---- */
+
+  .tablewrap { overflow-x: auto; max-width: var(--plate); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 520px;
+    font-size: var(--step--1);
+  }
+  caption {
+    text-align: left;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding-bottom: 0.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.9rem 0.5rem 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  thead th {
+    border-bottom: 1.5px solid var(--ink);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td .mono { color: var(--ink); }
+  tbody tr:last-child td { border-bottom: 1px solid var(--rule-firm); }
+
+  /* ---- callout ---- */
+
+  .note {
+    border-left: 3px solid var(--axis);
+    background: var(--sunken);
+    padding: 0.9rem 1.1rem;
+    max-width: var(--measure);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .note.warn { border-left-color: var(--fault); }
+  .note h4 { color: var(--axis); }
+  .note.warn h4 { color: var(--fault); }
+
+  pre {
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    padding: 0.85rem 1rem;
+    overflow-x: auto;
+    margin: 0;
+    max-width: var(--plate);
+    font-size: var(--step--1);
+    line-height: 1.55;
+  }
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    white-space: pre;
+    font-size: 1em;
+  }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.2rem;
+    color: var(--faint);
+    font-size: var(--step--1);
+    max-width: var(--plate);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  @media (max-width: 640px) {
+    :root { --step-4: 2.3rem; --step-3: 1.7rem; --step-2: 1.35rem; }
+    body { padding: 0 1rem 4rem; }
+    header.masthead { padding-top: 2.5rem; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">
+      <span>my_robot_docking</span><span class="sep">/</span><span>ROS 2 Humble</span>
+    </div>
+    <h1>Corridor Docking</h1>
+    <p class="standfirst">
+      How the docking server takes a differential-drive robot from a Nav2 waypoint
+      onto an AprilTag dock &mdash; the pipeline, the action lifecycle, and the
+      control logic that replaced steering straight at the docked pose.
+    </p>
+  </header>
+
+  <div class="keyfacts">
+    <div><span class="k">Action</span><span class="v mono">/dock</span></div>
+    <div><span class="k">Sensing</span><span class="v">AprilTag + odom + lidar</span></div>
+    <div><span class="k">Control frame</span><span class="v mono">odom</span></div>
+    <div><span class="k">Phases</span><span class="v">5</span></div>
+    <div><span class="k">Camera FOV</span><span class="v num">&plusmn;40&deg;</span></div>
+  </div>
+
+  <!-- ================= 1. PIPELINE ================= -->
+  <section id="pipeline">
+    <div class="sec-head"><span class="sec-num">01</span><h2>What talks to what</h2></div>
+
+    <div class="col">
+      <p>
+        Three nodes and one arbiter. The detector turns camera frames into tag
+        detections and TF; the docking server fuses those with odometry and the
+        laser scan into velocity commands; the arbiter decides whether the base
+        listens to docking or to Nav2.
+      </p>
+    </div>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 900 400" role="img" aria-label="Node graph: camera feeds apriltag_node, which publishes detections and TF to docking_server. Lidar and EKF odometry also feed docking_server. Docking server commands the velocity arbiter on cmd_vel_dock, which takes priority over Nav2's cmd_vel, and outputs cmd_vel_out to the base.">
+          <defs>
+            <marker id="p1arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+            </marker>
+            <marker id="p1arrowax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--axis)"/>
+            </marker>
+          </defs>
+
+          <!-- sensor column -->
+          <rect class="s-sunk" x="16" y="30"  width="126" height="40" rx="2"/>
+          <text class="s-t" x="79" y="55" text-anchor="middle">camera</text>
+
+          <rect class="s-sunk" x="16" y="150" width="126" height="40" rx="2"/>
+          <text class="s-t" x="79" y="175" text-anchor="middle">lidar</text>
+
+          <rect class="s-sunk" x="16" y="222" width="126" height="40" rx="2"/>
+          <text class="s-t" x="79" y="247" text-anchor="middle">EKF</text>
+
+          <!-- detector -->
+          <rect class="s-box" x="206" y="30" width="150" height="40" rx="2"/>
+          <text class="s-t" x="281" y="55" text-anchor="middle">apriltag_node</text>
+
+          <!-- nav2 -->
+          <rect class="s-box" x="206" y="318" width="150" height="40" rx="2"/>
+          <text class="s-t" x="281" y="343" text-anchor="middle">Nav2</text>
+
+          <!-- docking server -->
+          <rect class="s-box" x="430" y="112" width="184" height="112" rx="2" stroke-width="2"/>
+          <text class="s-t-bd" x="522" y="152" text-anchor="middle">docking_server</text>
+          <line class="s-thin" x1="446" y1="166" x2="598" y2="166"/>
+          <text class="s-t-sm" x="522" y="186" text-anchor="middle">tag_tracker</text>
+          <text class="s-t-sm" x="522" y="206" text-anchor="middle">corridor controller</text>
+
+          <!-- arbiter -->
+          <rect class="s-box" x="700" y="150" width="176" height="64" rx="2"/>
+          <text class="s-t" x="788" y="176" text-anchor="middle">velocity_arbiter</text>
+          <text class="s-t-sm" x="788" y="196" text-anchor="middle">dock wins if fresh</text>
+
+          <!-- base -->
+          <rect class="s-sunk" x="700" y="318" width="176" height="40" rx="2"/>
+          <text class="s-t" x="788" y="343" text-anchor="middle">base</text>
+
+          <!-- edges -->
+          <line class="s-line" x1="142" y1="50" x2="200" y2="50" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="171" y="40" text-anchor="middle">image</text>
+
+          <path class="s-line" d="M 356 50 L 396 50 L 396 140 L 424 140" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="404" y="42" text-anchor="start">/detections + tf</text>
+
+          <path class="s-line" d="M 142 170 L 396 170 L 424 170" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="240" y="162" text-anchor="start">/scan</text>
+
+          <path class="s-line" d="M 142 242 L 396 242 L 396 200 L 424 200" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="240" y="234" text-anchor="start">/odometry/filtered</text>
+
+          <line class="s-ax" x1="614" y1="168" x2="694" y2="168" stroke-width="2" marker-end="url(#p1arrowax)"/>
+          <text class="s-ax-t" x="654" y="158" text-anchor="middle">/cmd_vel_dock</text>
+
+          <path class="s-line" d="M 356 338 L 620 338 L 620 226 L 700 196" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="450" y="330" text-anchor="start">/cmd_vel</text>
+
+          <line class="s-line" x1="788" y1="214" x2="788" y2="312" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="798" y="268" text-anchor="start">/cmd_vel_out</text>
+
+          <path class="s-dash" d="M 476 224 L 476 290 L 281 290 L 281 312" marker-end="url(#p1arrow)"/>
+          <text class="s-t-sm" x="360" y="283" text-anchor="middle">NavigateToPose</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Fig 1</b> The docking server both drives Nav2 (dashed, to reach the
+        predocking pose) and later overrides it. The arbiter republishes
+        <span class="mono">/cmd_vel_dock</span> whenever it is fresher than
+        <span class="mono">command_timeout</span>, so docking silently takes the
+        base away from Nav2 without either node coordinating.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ================= 2. LIFECYCLE ================= -->
+  <section id="lifecycle">
+    <div class="sec-head"><span class="sec-num">02</span><h2>The dock action, start to finish</h2></div>
+
+    <div class="col">
+      <p>
+        One goal, one dock. The server rejects a second goal while it is busy.
+        Everything after the optional Nav2 leg runs inside a retry loop, so a
+        lost tag costs an attempt rather than the whole goal.
+      </p>
+    </div>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 900 660" role="img" aria-label="Dock action flow: goal accepted, optional Nav2 leg to the predocking pose, then a retry loop of tag search followed by corridor approach. Success succeeds the goal; safety stop and cancel abort immediately; tag or control failures either recover and retry or abort once retries are exhausted.">
+          <defs>
+            <marker id="p2arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+            </marker>
+            <marker id="p2arrowax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--axis)"/>
+            </marker>
+            <marker id="p2arrowfa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--fault)"/>
+            </marker>
+          </defs>
+
+          <!-- 1 goal -->
+          <rect class="s-box" x="300" y="18" width="280" height="42" rx="2"/>
+          <text class="s-t-bd" x="440" y="44" text-anchor="middle">goal accepted</text>
+          <text class="s-t-sm" x="592" y="36" text-anchor="start">dock_id valid,</text>
+          <text class="s-t-sm" x="592" y="52" text-anchor="start">server idle</text>
+
+          <line class="s-line" x1="440" y1="60" x2="440" y2="96" marker-end="url(#p2arrow)"/>
+
+          <!-- 2 nav2 -->
+          <rect class="s-dash" x="300" y="102" width="280" height="58" rx="2"/>
+          <text class="s-t" x="440" y="126" text-anchor="middle">Nav2 to predocking pose</text>
+          <text class="s-t-sm" x="440" y="146" text-anchor="middle">optional: navigate_to_staging_pose</text>
+          <text class="s-t-sm" x="592" y="124" text-anchor="start">cancelled early at</text>
+          <text class="s-t-sm" x="592" y="140" text-anchor="start">acceptance distance</text>
+
+          <line class="s-line" x1="440" y1="160" x2="440" y2="196" marker-end="url(#p2arrow)"/>
+
+          <!-- retry loop frame -->
+          <rect class="s-thin" x="180" y="196" width="520" height="252" rx="3" stroke-dasharray="3 4"/>
+          <text class="s-t-sm" x="192" y="214" text-anchor="start">retry loop &mdash; max_retries + 1 attempts</text>
+
+          <!-- 3 search -->
+          <rect class="s-box" x="300" y="228" width="280" height="52" rx="2"/>
+          <text class="s-t" x="440" y="250" text-anchor="middle">search for tag</text>
+          <text class="s-t-sm" x="440" y="268" text-anchor="middle">rotate-in-place sweep</text>
+
+          <line class="s-line" x1="440" y1="280" x2="440" y2="316" marker-end="url(#p2arrow)"/>
+
+          <!-- 4 approach -->
+          <rect class="s-box" x="300" y="322" width="280" height="52" rx="2" stroke-width="2"/>
+          <text class="s-t-bd" x="440" y="344" text-anchor="middle">corridor approach</text>
+          <text class="s-t-sm" x="440" y="362" text-anchor="middle">see Fig 5</text>
+
+          <line class="s-line" x1="440" y1="374" x2="440" y2="404" marker-end="url(#p2arrow)"/>
+          <text class="s-t-sm" x="450" y="394" text-anchor="start">outcome</text>
+
+          <!-- outcome split bar -->
+          <line class="s-line" x1="228" y1="410" x2="792" y2="410"/>
+          <line class="s-ax" x1="792" y1="410" x2="792" y2="470" stroke-width="2" marker-end="url(#p2arrowax)"/>
+          <line class="s-fa" x1="228" y1="410" x2="228" y2="470" stroke-width="1.6" marker-end="url(#p2arrowfa)"/>
+          <line class="s-line" x1="510" y1="410" x2="510" y2="470" marker-end="url(#p2arrow)"/>
+
+          <!-- succeeded -->
+          <rect class="s-box" x="700" y="476" width="184" height="46" rx="2" stroke="var(--axis)" stroke-width="2"/>
+          <text class="s-ax-t" x="792" y="497" text-anchor="middle">succeed</text>
+          <text class="s-t-sm" x="792" y="514" text-anchor="middle">error_code NONE</text>
+          <text class="s-ax-t" x="792" y="432" text-anchor="middle">reached</text>
+
+          <!-- abort now -->
+          <rect class="s-box" x="140" y="476" width="184" height="46" rx="2" stroke="var(--fault)" stroke-width="1.6"/>
+          <text class="s-fa-t" x="232" y="497" text-anchor="middle">abort now</text>
+          <text class="s-t-sm" x="232" y="514" text-anchor="middle">no retry</text>
+          <text class="s-fa-t" x="232" y="432" text-anchor="middle">safety / cancel</text>
+
+          <!-- retriable -->
+          <rect class="s-box" x="398" y="476" width="224" height="46" rx="2"/>
+          <text class="s-t" x="510" y="497" text-anchor="middle">attempts left?</text>
+          <text class="s-t-sm" x="510" y="514" text-anchor="middle">tag lost / control failed</text>
+          <text class="s-t-sm" x="510" y="432" text-anchor="middle">recoverable</text>
+
+          <!-- no -> abort -->
+          <path class="s-fa" d="M 398 499 L 350 499 L 350 546 L 232 546 L 232 528" stroke-width="1.6" marker-end="url(#p2arrowfa)"/>
+          <text class="s-fa-t" x="356" y="562" text-anchor="start">no</text>
+
+          <!-- yes -> recovery -->
+          <line class="s-line" x1="510" y1="522" x2="510" y2="574" marker-end="url(#p2arrow)"/>
+          <text class="s-t-sm" x="520" y="546" text-anchor="start">yes</text>
+
+          <rect class="s-box" x="398" y="580" width="224" height="46" rx="2"/>
+          <text class="s-t" x="510" y="601" text-anchor="middle">recover</text>
+          <text class="s-t-sm" x="510" y="618" text-anchor="middle">back up, then rotate</text>
+
+          <!-- loop back -->
+          <path class="s-line" d="M 398 603 L 120 603 L 120 254 L 294 254" marker-end="url(#p2arrow)"/>
+          <text class="s-t-sm" x="130" y="430" text-anchor="start" transform="rotate(-90 130 430)">next attempt</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Fig 2</b> Only two outcomes end the goal immediately: a safety stop and
+        a cancel. Everything else gets another attempt, and a tag failure earns a
+        recovery manoeuvre first so the next sweep starts from somewhere new.
+      </figcaption>
+    </figure>
+
+    <div class="tablewrap">
+      <table>
+        <caption>Goal fields</caption>
+        <thead>
+          <tr><th>Field</th><th>Effect</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="mono">dock_id</span></td><td>Selects the dock from the database. An unknown id is rejected before the goal is accepted.</td></tr>
+          <tr><td><span class="mono">navigate_to_staging_pose</span></td><td>Run the Nav2 leg first. Skip it when the robot is already parked near the dock.</td></tr>
+          <tr><td><span class="mono">use_offset_override</span></td><td>Take <span class="mono">final_distance</span>, <span class="mono">lateral_offset</span> and <span class="mono">yaw_offset</span> from the goal instead of the database.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <caption>Result codes</caption>
+        <thead>
+          <tr><th>Code</th><th>Means</th><th>Usual cause</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="mono">NAVIGATION_FAILED</span></td><td>Never reached the predocking pose</td><td>Nav2 could not plan or the pose sits in an obstacle</td></tr>
+          <tr><td><span class="mono">TAG_NOT_FOUND</span></td><td>The sweep never saw the tag</td><td>Wrong tag id, bad lighting, robot facing away</td></tr>
+          <tr><td><span class="mono">TAG_LOST</span></td><td>The tag went out of frame during a visual phase</td><td>Detector dropout, or the tag left the &plusmn;40&deg; cone</td></tr>
+          <tr><td><span class="mono">CONTROL_FAILED</span></td><td>Drove past the docked pose, or exceeded the reverse budget</td><td>Odometry drift, or gains too hot for the surface</td></tr>
+          <tr><td><span class="mono">SAFETY_STOP</span></td><td>An obstacle, a stale sensor, or the tag too close</td><td>See <a href="#safety">section 06</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= 3. COORDINATES ================= -->
+  <section id="coordinates">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Everything is measured on the axis</h2></div>
+
+    <div class="col">
+      <p>
+        The tag has an outward normal. Extend it into the room and you get the
+        <em>approach axis</em> &mdash; the line the robot must travel to arrive
+        square. Two points sit on it: the <b>docked pose</b> at
+        <span class="mono">final_distance</span> from the tag, and the
+        <b>corridor entry</b> further out at
+        <span class="mono">predocking_distance</span>.
+      </p>
+      <p>
+        Errors are resolved onto that axis rather than measured as a bearing to
+        the goal. This is the single most important idea in the controller, and
+        the thing the previous version got wrong.
+      </p>
+    </div>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 900 420" role="img" aria-label="Plan view of the dock. The tag is on a wall at left with its approach axis running right. The docked pose sits at final_distance and the corridor entry at predocking_distance. A robot off the axis shows three errors: along measured down the axis, cross measured perpendicular to it, and yaw between the robot heading and the axis direction.">
+          <defs>
+            <marker id="p3arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+            </marker>
+            <marker id="p3arrowax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--axis)"/>
+            </marker>
+            <pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="1.4" opacity="0.35"/>
+            </pattern>
+          </defs>
+
+          <!-- wall -->
+          <rect x="48" y="40" width="18" height="340" fill="url(#hatch)" stroke="currentColor" stroke-width="1.2"/>
+          <text class="s-t-sm" x="40" y="212" text-anchor="middle" transform="rotate(-90 40 212)">dock wall</text>
+
+          <!-- tag -->
+          <rect x="66" y="188" width="9" height="46" fill="var(--axis)"/>
+          <text class="s-ax-t" x="80" y="182" text-anchor="start">tag</text>
+
+          <!-- corridor band -->
+          <rect x="75" y="194" width="770" height="34" fill="var(--axis-soft)"/>
+          <line class="s-ax" x1="75" y1="194" x2="845" y2="194" stroke-dasharray="4 4" stroke-width="1"/>
+          <line class="s-ax" x1="75" y1="228" x2="845" y2="228" stroke-dasharray="4 4" stroke-width="1"/>
+
+          <!-- axis -->
+          <line class="s-ax" x1="845" y1="211" x2="90" y2="211" stroke-width="2" stroke-dasharray="9 5" marker-end="url(#p3arrowax)"/>
+          <text class="s-ax-t" x="700" y="203" text-anchor="start">approach axis</text>
+
+          <!-- docked pose robot (facing left) -->
+          <rect class="s-box" x="196" y="192" width="46" height="38" rx="2" stroke="var(--axis)" stroke-width="1.8"/>
+          <polygon points="196,204 182,211 196,218" fill="var(--axis)"/>
+          <text class="s-ax-t" x="219" y="256" text-anchor="middle">docked pose</text>
+
+          <!-- entry point -->
+          <circle cx="520" cy="211" r="7" fill="none" stroke="var(--axis)" stroke-width="2"/>
+          <circle cx="520" cy="211" r="2.2" fill="var(--axis)"/>
+          <text class="s-ax-t" x="520" y="256" text-anchor="middle">corridor entry</text>
+
+          <!-- dimension: final_distance -->
+          <line class="s-thin" x1="75" y1="140" x2="75" y2="188"/>
+          <line class="s-thin" x1="219" y1="140" x2="219" y2="188"/>
+          <line class="s-line" x1="75" y1="140" x2="219" y2="140" marker-start="url(#p3arrow)" marker-end="url(#p3arrow)"/>
+          <text class="s-t-sm" x="147" y="132" text-anchor="middle">final_distance</text>
+
+          <!-- dimension: predocking_distance -->
+          <line class="s-thin" x1="520" y1="96" x2="520" y2="204"/>
+          <line class="s-thin" x1="75" y1="96" x2="75" y2="136"/>
+          <line class="s-line" x1="75" y1="96" x2="520" y2="96" marker-start="url(#p3arrow)" marker-end="url(#p3arrow)"/>
+          <text class="s-t-sm" x="297" y="88" text-anchor="middle">predocking_distance</text>
+
+          <!-- dimension: corridor half width -->
+          <line class="s-line" x1="800" y1="194" x2="800" y2="211" marker-start="url(#p3arrow)"/>
+          <text class="s-t-sm" x="812" y="190" text-anchor="start">corridor_half_width</text>
+
+          <!-- off-axis robot -->
+          <g transform="translate(660,318) rotate(-160)">
+            <rect class="s-box" x="-24" y="-19" width="48" height="38" rx="2" stroke-width="1.8"/>
+            <polygon points="-24,-7 -38,0 -24,7" fill="currentColor"/>
+          </g>
+          <text class="s-t" x="700" y="352" text-anchor="start">robot</text>
+
+          <!-- cross -->
+          <line class="s-line" x1="660" y1="211" x2="660" y2="296" marker-start="url(#p3arrow)" marker-end="url(#p3arrow)"/>
+          <text class="s-t-bd" x="670" y="272" text-anchor="start">cross</text>
+
+          <!-- along -->
+          <line class="s-line" x1="660" y1="380" x2="219" y2="380" marker-start="url(#p3arrow)" marker-end="url(#p3arrow)"/>
+          <line class="s-thin" x1="660" y1="340" x2="660" y2="384"/>
+          <line class="s-thin" x1="219" y1="234" x2="219" y2="384"/>
+          <text class="s-t-bd" x="440" y="400" text-anchor="middle">along</text>
+
+          <!-- yaw arc -->
+          <path class="s-line" d="M 612 318 A 48 48 0 0 1 646 272"/>
+          <text class="s-t-bd" x="592" y="292" text-anchor="middle">yaw</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Fig 3</b> <span class="mono">along</span> is how far is left to travel
+        down the axis, <span class="mono">cross</span> is the perpendicular
+        deviation from it, and <span class="mono">yaw</span> is the heading error
+        against the axis direction. All three reach zero only at the docked pose.
+      </figcaption>
+    </figure>
+
+    <div class="col">
+      <p>
+        The distinction that matters: <span class="mono">cross</span> does not
+        grow with distance. A bearing to the goal does. Two robots 5&nbsp;cm off
+        the line, one at 0.6&nbsp;m and one at 2&nbsp;m out, have the same
+        cross-track error and need the same correction &mdash; but wildly
+        different bearings.
+      </p>
+      <p>
+        Backing in reuses all of it. Only the target heading changes: the robot
+        holds <span class="mono">axis + &pi;</span> and drives negative, so its
+        rear leads down the same corridor.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 4. WHY IT FAILED ================= -->
+  <section id="failure">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Why angled approaches used to fail</h2></div>
+
+    <div class="col">
+      <p>
+        The old controller steered at the docked pose and summed three angular
+        terms. It also declared an overshoot whenever the along-axis error went
+        negative. For a robot beside the dock, that error is negative from the
+        very first tick &mdash; being level with the tag puts you behind the
+        docked pose's plane. The goal aborted before the wheels turned.
+      </p>
+    </div>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 900 460" role="img" aria-label="Comparison of old and new behaviour from a ninety degree start. The robot begins beside the dock, inside the region behind the docked pose. The old controller aborted immediately with a false overshoot. The new controller turns to face the corridor entry, drives away from the dock to reach it, aligns with the axis, then runs in.">
+          <defs>
+            <marker id="p4arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+            </marker>
+            <marker id="p4arrowax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--axis)"/>
+            </marker>
+            <pattern id="hatch2" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width="1.4" opacity="0.35"/>
+            </pattern>
+          </defs>
+
+          <!-- behind-the-plane region -->
+          <rect x="75" y="40" width="150" height="380" fill="var(--fault-soft)"/>
+          <line class="s-fa" x1="225" y1="40" x2="225" y2="420" stroke-dasharray="5 4" stroke-width="1.4"/>
+          <text class="s-fa-t" x="150" y="62" text-anchor="middle">behind the</text>
+          <text class="s-fa-t" x="150" y="78" text-anchor="middle">docked pose</text>
+
+          <!-- wall -->
+          <rect x="48" y="40" width="18" height="380" fill="url(#hatch2)" stroke="currentColor" stroke-width="1.2"/>
+          <rect x="66" y="140" width="9" height="46" fill="var(--axis)"/>
+          <text class="s-ax-t" x="82" y="134" text-anchor="start">tag</text>
+
+          <!-- corridor -->
+          <rect x="75" y="146" width="770" height="34" fill="var(--axis-soft)"/>
+          <line class="s-ax" x1="845" y1="163" x2="96" y2="163" stroke-width="1.6" stroke-dasharray="9 5" marker-end="url(#p4arrowax)"/>
+
+          <!-- docked pose -->
+          <rect class="s-box" x="202" y="144" width="46" height="38" rx="2" stroke="var(--axis)" stroke-width="1.8"/>
+          <polygon points="202,156 188,163 202,170" fill="var(--axis)"/>
+          <text class="s-ax-t" x="225" y="208" text-anchor="middle">docked pose</text>
+
+          <!-- entry -->
+          <circle cx="560" cy="163" r="7" fill="none" stroke="var(--axis)" stroke-width="2"/>
+          <circle cx="560" cy="163" r="2.2" fill="var(--axis)"/>
+          <text class="s-ax-t" x="560" y="208" text-anchor="middle">corridor entry</text>
+
+          <!-- start robot, facing up (toward the axis), inside the red band -->
+          <g transform="translate(150,358) rotate(-90)">
+            <rect class="s-box" x="-24" y="-19" width="48" height="38" rx="2" stroke-width="1.8"/>
+            <polygon points="-24,-7 -38,0 -24,7" fill="currentColor"/>
+          </g>
+          <text class="s-t" x="150" y="404" text-anchor="middle">start &mdash; 90&deg; to the axis</text>
+
+          <!-- OLD: abort cross -->
+          <line class="s-fa" x1="176" y1="332" x2="204" y2="304" stroke-width="2.4"/>
+          <line class="s-fa" x1="204" y1="332" x2="176" y2="304" stroke-width="2.4"/>
+          <text class="s-fa-t" x="216" y="312" text-anchor="start">old: aborts on tick 1</text>
+          <text class="s-t-sm" x="216" y="330" text-anchor="start" fill="var(--fault)">"passed the docking pose"</text>
+
+          <!-- NEW path: 1 turn -->
+          <path class="s-ax" d="M 118 330 A 40 40 0 0 1 138 300" stroke-width="2"/>
+          <polygon points="138,300 130,300 136,308" fill="var(--axis)"/>
+          <text class="s-ax-t" x="66" y="318" text-anchor="start">1 turn</text>
+
+          <!-- 2 drive out to entry -->
+          <line class="s-ax" x1="176" y1="342" x2="546" y2="176" stroke-width="2.4" marker-end="url(#p4arrowax)"/>
+          <text class="s-ax-t" x="368" y="282" text-anchor="middle">2 drive out to the entry</text>
+
+          <!-- 3 align -->
+          <path class="s-ax" d="M 596 148 A 40 40 0 0 1 600 186" stroke-width="2"/>
+          <polygon points="600,186 594,180 592,190" fill="var(--axis)"/>
+          <text class="s-ax-t" x="610" y="140" text-anchor="start">3 align</text>
+
+          <!-- 4 run -->
+          <line class="s-ax" x1="546" y1="163" x2="262" y2="163" stroke-width="3" marker-end="url(#p4arrowax)"/>
+          <text class="s-ax-t" x="404" y="152" text-anchor="middle">4 run the axis</text>
+
+          <!-- note about direction -->
+          <text class="s-t-sm" x="368" y="300" text-anchor="middle">moves away from the dock first</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Fig 4</b> The counter-intuitive part of the fix: from beside the dock,
+        the correct first move is <em>away</em> from it, out to the corridor entry.
+        Steering at the docked pose instead cuts the corner and sweeps the robot
+        across the dock face.
+      </figcaption>
+    </figure>
+
+    <div class="note warn">
+      <h4>Overshoot is now a run-phase fact</h4>
+      <p>
+        A negative <span class="mono">along</span> only means something once the
+        robot is on the axis and aligned. The abort therefore requires all three:
+        <span class="mono">along &lt; -overshoot_margin</span>,
+        <span class="mono">|cross| &le; corridor_half_width</span>, and
+        <span class="mono">|yaw| &le; entry_yaw_tolerance</span>. Starting behind
+        the plane is geometry, not a fault.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 5. STATE MACHINE ================= -->
+  <section id="states">
+    <div class="sec-head"><span class="sec-num">05</span><h2>The corridor state machine</h2></div>
+
+    <div class="col">
+      <p>
+        Five phases. Every one is either a rotation in place or a straight line,
+        which is what makes the swept area predictable &mdash; a controller that
+        only ever turns or only ever goes straight cannot arc into the dock.
+      </p>
+      <p>
+        Which phase the approach starts in depends on where the robot already is.
+        Being off the corridor needs repositioning; a pure heading error needs
+        only a turn.
+      </p>
+    </div>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 900 400" role="img" aria-label="State machine with five states: enter turn, enter drive, align, run, reached. Entry conditions route a new approach into enter turn when off the corridor, align when on the corridor but mis-aligned, and run when already aligned. Back edges return from enter drive to enter turn on a large bearing error, from run to align for a residual yaw error, from run to enter turn when cross-track blows out, and from reached to run on drift.">
+          <defs>
+            <marker id="p5arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+            </marker>
+            <marker id="p5arrowax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--axis)"/>
+            </marker>
+          </defs>
+
+          <!-- entry conditions -->
+          <text class="s-t-sm" x="16" y="30" text-anchor="start">approach starts in&hellip;</text>
+
+          <line class="s-ax" x1="80" y1="44" x2="80" y2="146" stroke-width="1.6" marker-end="url(#p5arrowax)"/>
+          <text class="s-ax-t" x="90" y="70" text-anchor="start">off the corridor</text>
+
+          <path class="s-ax" d="M 96 44 L 420 44 L 420 146" stroke-width="1.6" marker-end="url(#p5arrowax)"/>
+          <text class="s-ax-t" x="300" y="36" text-anchor="start">on it, yaw off</text>
+
+          <path class="s-ax" d="M 96 44 L 596 44 L 596 146" stroke-width="1.6" marker-end="url(#p5arrowax)"/>
+          <text class="s-ax-t" x="606" y="70" text-anchor="start">on it, aligned</text>
+
+          <!-- states -->
+          <rect class="s-box" x="18" y="152" width="124" height="52" rx="2"/>
+          <text class="s-t-bd" x="80" y="176" text-anchor="middle">ENTER</text>
+          <text class="s-t-bd" x="80" y="192" text-anchor="middle">TURN</text>
+
+          <rect class="s-box" x="194" y="152" width="124" height="52" rx="2"/>
+          <text class="s-t-bd" x="256" y="176" text-anchor="middle">ENTER</text>
+          <text class="s-t-bd" x="256" y="192" text-anchor="middle">DRIVE</text>
+
+          <rect class="s-box" x="358" y="152" width="124" height="52" rx="2"/>
+          <text class="s-t-bd" x="420" y="184" text-anchor="middle">ALIGN</text>
+
+          <rect class="s-box" x="534" y="152" width="124" height="52" rx="2" stroke-width="2"/>
+          <text class="s-t-bd" x="596" y="184" text-anchor="middle">RUN</text>
+
+          <rect class="s-box" x="710" y="152" width="124" height="52" rx="2" stroke="var(--axis)" stroke-width="2"/>
+          <text class="s-ax-t" x="772" y="184" text-anchor="middle">REACHED</text>
+
+          <!-- forward edges -->
+          <line class="s-line" x1="142" y1="170" x2="188" y2="170" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="165" y="140" text-anchor="middle">facing</text>
+          <text class="s-t-sm" x="165" y="128" text-anchor="middle">waypoint</text>
+
+          <line class="s-line" x1="318" y1="170" x2="352" y2="170" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="335" y="140" text-anchor="middle">last</text>
+          <text class="s-t-sm" x="335" y="128" text-anchor="middle">waypoint</text>
+
+          <line class="s-line" x1="482" y1="170" x2="528" y2="170" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="505" y="140" text-anchor="middle">aligned +</text>
+          <text class="s-t-sm" x="505" y="128" text-anchor="middle">tag in frame</text>
+
+          <line class="s-ax" x1="658" y1="170" x2="704" y2="170" stroke-width="2" marker-end="url(#p5arrowax)"/>
+          <text class="s-t-sm" x="681" y="140" text-anchor="middle">within</text>
+          <text class="s-t-sm" x="681" y="128" text-anchor="middle">tolerance</text>
+
+          <!-- back edges -->
+          <path class="s-line" d="M 256 204 L 256 234 L 80 234 L 80 204" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="168" y="250" text-anchor="middle">bearing &gt; 0.6 rad</text>
+
+          <path class="s-line" d="M 596 204 L 596 282 L 420 282 L 420 204" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="508" y="298" text-anchor="middle">position good, yaw still off</text>
+
+          <path class="s-line" d="M 772 204 L 772 234 L 596 234 L 596 204" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="684" y="250" text-anchor="middle">drifted out</text>
+
+          <path class="s-line" d="M 578 204 L 578 342 L 62 342 L 62 204" marker-end="url(#p5arrow)"/>
+          <text class="s-t-sm" x="320" y="358" text-anchor="middle">cross-track blown out &mdash; replan, up to max_corridor_replans</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Fig 5</b> <span class="mono">RUN</span> hands back to
+        <span class="mono">ALIGN</span> when the position is already good but the
+        heading is not: steering only bends the heading while the robot is moving,
+        so a residual yaw error at a stopped robot can only be fixed by turning.
+      </figcaption>
+    </figure>
+
+    <div class="tablewrap">
+      <table>
+        <caption>Phase behaviour</caption>
+        <thead>
+          <tr><th>Phase</th><th>Motion</th><th>Guidance</th><th>Tag needed</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="mono">ENTER_TURN</span></td>
+            <td>Rotate in place</td>
+            <td>Odometry, toward the latched waypoint</td>
+            <td>No</td>
+          </tr>
+          <tr>
+            <td><span class="mono">ENTER_DRIVE</span></td>
+            <td>Straight line</td>
+            <td>Odometry, bearing hold to the waypoint</td>
+            <td>No</td>
+          </tr>
+          <tr>
+            <td><span class="mono">ALIGN</span></td>
+            <td>Rotate in place</td>
+            <td>Odometry; needs the tag to <em>exit</em></td>
+            <td>To leave</td>
+          </tr>
+          <tr>
+            <td><span class="mono">RUN</span></td>
+            <td>Straight down the axis</td>
+            <td>Visual servo, re-anchored every tick</td>
+            <td>Yes, unless reversing</td>
+          </tr>
+          <tr>
+            <td><span class="mono">REACHED</span></td>
+            <td>Stopped</td>
+            <td>Re-checks tolerances for <span class="mono">verification_duration</span></td>
+            <td>Same as RUN</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="col">
+      <h3>The run law</h3>
+      <p>
+        A Stanley-style law: hold the axis heading, and close the perpendicular
+        deviation with a term that softens as speed rises.
+      </p>
+    </div>
+
+<pre><code>speed = clamp(distance_kp * along, min_linear_speed, max_linear_speed)
+omega = yaw_kp * yaw + atan2(cross_track_kp * cross, speed + 0.05)</code></pre>
+
+    <div class="col">
+      <p>
+        There is no bearing-to-goal term, which is why the law stays well behaved
+        as the goal distance goes to zero &mdash; a bearing swings through
+        &plusmn;&pi; on millimetre noise when you are sitting on top of the point
+        you are measuring to.
+      </p>
+      <p>
+        Backing in needs no sign flip on the cross-track term. Reversing mirrors
+        the travelling frame's left against the axis <em>and</em> moves the
+        leading point from the nose to the rear; the two cancel.
+      </p>
+
+      <h3>Turning in place</h3>
+      <p>
+        A half turn puts the yaw error on the &plusmn;&pi; branch cut, where its
+        sign flips on noise and a naive controller reverses direction forever.
+        The turn direction is latched on entry and only re-evaluated once the
+        error is comfortably off the cut, below <span class="mono">&pi;/2</span>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 6. ANCHORING ================= -->
+  <section id="anchoring">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Anchoring, and the field-of-view problem</h2></div>
+
+    <div class="col">
+      <p>
+        The camera sees roughly <b>&plusmn;40&deg;</b>. Any manoeuvre that puts
+        the robot onto the axis from off to one side must turn the tag out of
+        frame &mdash; that is unavoidable, not a bug to fix.
+      </p>
+      <p>
+        So the controller does not servo on live pixels. It latches the tag pose
+        into the <span class="mono">odom</span> frame and plans against that,
+        refreshing the latch whenever the tag comes back into view. Entry legs run
+        on odometry by design; the run phase is visual.
+      </p>
+      <ul>
+        <li>The first anchor averages <span class="mono">anchor_samples</span> observations and drops the single worst outlier &mdash; one bad detection tilts the whole axis, and the axis is what the entry legs are planned from.</li>
+        <li>Later observations are low-passed onto the latch with <span class="mono">anchor_filter_alpha</span>, so angular noise does not swing the corridor around under the robot.</li>
+        <li>Backing in is odometry-only for its last stretch, bounded by <span class="mono">max_reverse_distance</span>. The entry distance for a reverse dock is <span class="mono">staging_distance</span> rather than <span class="mono">predocking_distance</span>, precisely to keep that blind leg short.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= 7. SAFETY ================= -->
+  <section id="safety">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Safety layers</h2></div>
+
+    <div class="tablewrap">
+      <table>
+        <caption>What can stop an approach</caption>
+        <thead>
+          <tr><th>Guard</th><th>When it applies</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Sensor freshness</td>
+            <td>Every tick</td>
+            <td>Odometry and scan must be newer than <span class="mono">sensor_timeout</span></td>
+          </tr>
+          <tr>
+            <td>Minimum tag distance</td>
+            <td>Every tick</td>
+            <td>The last guard that stays live inside the dock face</td>
+          </tr>
+          <tr>
+            <td>Swept rotation clearance</td>
+            <td>Rotating in place</td>
+            <td>Closest return in any direction, <em>excluding</em> the dock's own bearing</td>
+          </tr>
+          <tr>
+            <td>Directional stop</td>
+            <td>Moving, outside the contact band</td>
+            <td>Front sector when driving, rear sector when backing</td>
+          </tr>
+          <tr>
+            <td>Reverse travel budget</td>
+            <td>Backing in</td>
+            <td>Bounds how far odometry alone is trusted</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="col">
+      <p>
+        Two of these need explaining, because the obvious implementation of each
+        is wrong.
+      </p>
+      <p>
+        <b>Rotation clearance excludes the dock.</b> A rotation sweeps the whole
+        footprint, so every bearing matters &mdash; except the station the robot
+        is deliberately parked in front of, which would otherwise dominate the
+        minimum and veto every turn near a dock.
+      </p>
+      <p>
+        <b>The directional stop mutes at the dock face.</b> Inside
+        <span class="mono">final_distance + dock_contact_distance</span> the dock
+        fills the very sector the robot is driving into, so the stop would fault
+        on its own target. Below that band,
+        <span class="mono">minimum_tag_distance</span> is the guard that remains.
+      </p>
+    </div>
+
+    <div class="note">
+      <h4>Stop distances are measured from base_footprint</h4>
+      <p>
+        The circumscribed footprint radius is about <b>0.17&nbsp;m</b> &mdash; the
+        camera nose sits at 0.163&nbsp;m. A stop distance below that only fires
+        once the robot has already made contact, which is why the front and rear
+        stops sit at 0.22&nbsp;m.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 8. TUNING ================= -->
+  <section id="tuning">
+    <div class="sec-head"><span class="sec-num">08</span><h2>What to turn when</h2></div>
+
+    <div class="tablewrap">
+      <table>
+        <caption>Corridor parameters &mdash; config/docking_config.yaml</caption>
+        <thead>
+          <tr><th>Parameter</th><th class="num">Default</th><th>Turn it when</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="mono">corridor_half_width</span></td><td class="num">0.12</td><td>The robot repositions for deviations you would rather it just steered out</td></tr>
+          <tr><td><span class="mono">cross_track_kp</span></td><td class="num">1.20</td><td>It converges onto the line too slowly, or weaves along it</td></tr>
+          <tr><td><span class="mono">yaw_kp</span></td><td class="num">0.40</td><td>Heading lags behind the axis, or the tail wags on the run in</td></tr>
+          <tr><td><span class="mono">align_yaw_tolerance</span></td><td class="num">0.05</td><td>It sits in ALIGN hunting; must stay tighter than <span class="mono">yaw_tolerance</span></td></tr>
+          <tr><td><span class="mono">overshoot_margin</span></td><td class="num">0.08</td><td>Spurious CONTROL_FAILED near the goal; must exceed <span class="mono">distance_tolerance</span></td></tr>
+          <tr><td><span class="mono">min_linear_speed</span></td><td class="num">0.03</td><td>It stalls on carpet before reaching the goal</td></tr>
+          <tr><td><span class="mono">min_angular_speed</span></td><td class="num">0.10</td><td>In-place turns stall against static friction</td></tr>
+          <tr><td><span class="mono">approach_taper_distance</span></td><td class="num">0.25</td><td>It arrives too hot, or crawls the last stretch</td></tr>
+          <tr><td><span class="mono">dock_keepout_radius</span></td><td class="num">0.35</td><td>Entry legs pass closer to the dock than you want</td></tr>
+          <tr><td><span class="mono">anchor_samples</span></td><td class="num">5</td><td>The axis wanders between attempts &mdash; raise it</td></tr>
+          <tr><td><span class="mono">anchor_filter_alpha</span></td><td class="num">0.35</td><td>Lower to smooth a noisy detector; raise to track a moving estimate</td></tr>
+          <tr><td><span class="mono">rotation_stop_distance</span></td><td class="num">0.22</td><td>Should track the circumscribed footprint radius plus margin</td></tr>
+          <tr><td><span class="mono">dock_contact_distance</span></td><td class="num">0.15</td><td>The directional stop fires on the dock itself</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="col">
+      <h3>Reading the logs</h3>
+      <p>
+        The server logs one line on every phase change, which is usually enough to
+        tell a control problem from a perception one.
+      </p>
+    </div>
+
+<pre><code>Docking home_dock (forward): enter_turn along=-0.300 cross=-1.200 yaw=1.571
+Docking home_dock (forward): enter_drive along=-0.300 cross=-1.200 yaw=1.001
+Docking home_dock (forward): align      along= 0.700 cross=-0.021 yaw=1.729
+Docking home_dock (forward): run        along= 0.700 cross=-0.021 yaw=0.048
+Docking home_dock (forward): reached    along= 0.002 cross= 0.004 yaw=0.019</code></pre>
+
+    <div class="col">
+      <ul>
+        <li><b>Never leaves <span class="mono">enter_drive</span></b> &mdash; the waypoint is unreachable, or odometry is drifting faster than the leg completes.</li>
+        <li><b>Cycles <span class="mono">run &rarr; enter_turn</span></b> &mdash; cross-track is blowing out. Check the tag normal sign and the anchor filter before touching gains.</li>
+        <li><b>Sits in <span class="mono">align</span></b> &mdash; aligned but no fresh tag, so the run will not start. A perception problem, not a control one.</li>
+        <li><b><span class="mono">cross</span> large and constant</b> &mdash; the axis itself is wrong. Suspect the dock database, not the controller.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= 9. DATABASE ================= -->
+  <section id="database">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Dock database and the two yaw conventions</h2></div>
+
+    <div class="col">
+      <p>
+        A dock definition is a tag id, a reference pose, and three distances that
+        must satisfy
+        <span class="mono">predocking &gt; staging &gt; final</span>.
+      </p>
+    </div>
+
+    <div class="note warn">
+      <h4>reference_pose yaw means two different things</h4>
+      <p>
+        A dock written by <span class="mono">record_dock_pose</span> stores the raw
+        <em>tag frame</em> pose. Its yaw lies in the tag plane, so the approach
+        direction is derived from <span class="mono">reference_pose</span> minus
+        <span class="mono">staging_pose</span> instead, and
+        <span class="mono">reference_pose[2]</span> is ignored.
+      </p>
+      <p>
+        A hand-authored dock using <span class="mono">staging_distance</span> has no
+        robot pose to derive from, so there
+        <span class="mono">reference_pose[2]</span> <em>is</em> the approach
+        direction.
+      </p>
+      <p>
+        The two differ by about a quarter turn. Copying yaw values between the two
+        forms aims the dock sideways, so the database reports the disagreement at
+        load time rather than on the floor.
+      </p>
+    </div>
+
+<pre><code>[WARN] Dock home_dock: approach direction 3.116 rad derived from staging_pose
+       differs from reference_pose yaw 1.577 rad by 1.539 rad.</code></pre>
+  </section>
+
+  <!-- ================= 10. TESTS ================= -->
+  <section id="tests">
+    <div class="sec-head"><span class="sec-num">10</span><h2>What the tests actually prove</h2></div>
+
+    <div class="col">
+      <p>
+        The controller is free of ROS types, so the whole state machine runs under
+        plain pytest. The convergence suite is the one worth knowing about: it
+        rolls a unicycle model forward under the controller's own commands from
+        seven start angles &mdash; 0&deg;, 45&deg;, 90&deg;, 90&deg; mirrored,
+        135&deg;, 180&deg;, and an offset skew &mdash; forwards and in reverse.
+      </p>
+      <p>
+        Alongside convergence it asserts something the unit tests cannot: that no
+        pose in any executed path is <em>both</em> near the dock and off the axis.
+        That is the hugging failure stated as a property, and it is what a
+        per-tick test would miss.
+      </p>
+    </div>
+
+<pre><code>cd src/my_robot_docking &amp;&amp; python3 -m pytest test -q</code></pre>
+
+    <div class="col">
+      <p>
+        A law that looks correct one tick at a time can still orbit, stall, or
+        graze the dock over a hundred of them. Both bugs found late in this work
+        &mdash; the inverted reverse cross-track sign, and the residual yaw error
+        that no amount of steering could remove once the robot had stopped
+        &mdash; were caught by the simulation, not by inspection.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    my_robot_docking &middot; docking_server.py, approach_controller.py,
+    docking_geometry.py, dock_database.py
+  </footer>
+
+</div>

@@ -1,4 +1,9 @@
 # Simulation stations use tag-relative poses for predocking and staging.
+#
+# These docks are hand authored with staging_distance, so reference_pose[2] IS
+# the approach direction: the heading the robot holds while driving into the
+# dock. That is a different convention from the recorded docks in
+# dock_database.yaml, where the same field holds the tag frame's own yaw.
 schema_version: 2
 
 docks:
@@ -12,7 +17,7 @@ docks:
     final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0
-    reverse_docking: true
+    reverse_docking: false
 
   flex_dock1:
     tag_id: 1

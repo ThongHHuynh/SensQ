@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Dict, Sequence
+from typing import Dict, List, Sequence
 
 import yaml
 
@@ -33,9 +33,24 @@ class DockDefinition:
 
 
 class DockDatabase:
-    """Loads and validates docking station definitions from a YAML file."""
+    """Loads and validates docking station definitions from a YAML file.
+
+    ``reference_pose`` carries two different meanings depending on how the
+    dock was authored, and they differ by about a quarter turn:
+
+    * with ``staging_pose`` -- the raw tag frame pose as written by
+      ``record_dock_pose``. Its yaw is the tag frame's own yaw, which lies in
+      the tag plane, so the approach direction is derived from the recorded
+      robot pose instead and ``reference_pose[2]`` is ignored.
+    * with ``staging_distance`` -- a hand-authored pose whose yaw *is* the
+      approach direction, because there is no robot pose to derive one from.
+
+    Mixing the two silently aims the dock ninety degrees away from its tag, so
+    the mismatch is reported through :meth:`warnings`.
+    """
 
     SUPPORTED_SCHEMA_VERSIONS = (1, 2)
+    APPROACH_YAW_MISMATCH_TOLERANCE = 0.35
 
     def __init__(self, database_path, legacy_predocking_offset=0.5):
         self._path = Path(database_path)
@@ -45,6 +60,7 @@ class DockDatabase:
                 'legacy_predocking_offset must be positive'
             )
         self._docks: Dict[str, DockDefinition] = {}
+        self._warnings: List[str] = []
         self._load()
 
     def _load(self):
@@ -154,6 +170,7 @@ class DockDatabase:
             tag_delta_y = reference[1] - staging[1]
             staging_distance = math.hypot(tag_delta_x, tag_delta_y)
             approach_yaw = math.atan2(tag_delta_y, tag_delta_x)
+            self._check_approach_yaw(dock_id, approach_yaw, reference[2])
             if self._schema_version == 1:
                 predocking_distance = (
                     staging_distance + self._legacy_predocking_offset
@@ -230,6 +247,29 @@ class DockDatabase:
             yaw_offset=yaw_offset,
             reverse_docking=reverse_docking,
         )
+
+    def _check_approach_yaw(self, dock_id, approach_yaw, reference_yaw):
+        """Flag a dock whose recorded tag yaw fights its approach direction."""
+
+        difference = abs(
+            math.atan2(
+                math.sin(approach_yaw - reference_yaw),
+                math.cos(approach_yaw - reference_yaw),
+            )
+        )
+        if difference > self.APPROACH_YAW_MISMATCH_TOLERANCE:
+            self._warnings.append(
+                f'Dock {dock_id}: approach direction {approach_yaw:.3f} rad '
+                f'derived from staging_pose differs from reference_pose yaw '
+                f'{reference_yaw:.3f} rad by {difference:.3f} rad. '
+                'reference_pose yaw is ignored for this dock; it is only used '
+                'when a dock is defined with staging_distance instead.'
+            )
+
+    def warnings(self):
+        """Non-fatal problems found while loading, in file order."""
+
+        return tuple(self._warnings)
 
     def get(self, dock_id: str) -> DockDefinition:
         """Return one dock by its configured ID."""

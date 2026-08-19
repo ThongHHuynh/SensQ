@@ -19,18 +19,18 @@ docking_server:
 
     # Timeouts
     transform_timeout: 0.05
-    tag_timeout: 0.50
-    tag_loss_grace_period: 0.75
-    tag_search_timeout: 15.0
+    tag_timeout: 0.80
+    tag_loss_grace_period: 1.50
+    tag_search_timeout: 25.0
     navigation_timeout: 120.0
     # Hand off before DWB's observed near-goal progress plateau (~0.21 m).
-    predocking_acceptance_distance: 0.2  # 0 disables early visual handoff
+    predocking_acceptance_distance: 0.25  # 0 disables early visual handoff
     navigation_feedback_rate: 5.0
     approach_timeout: 30.0
     verification_duration: 0.30
 
     # Search
-    search_angular_speed: 0.20
+    search_angular_speed: 0.15
     search_angle_limit: 1.57
 
     # Retry recovery
@@ -39,42 +39,71 @@ docking_server:
     retry_rotation_angle: 1.57  # radians
     retry_rotation_speed: 0.20  # radians/second
     retry_recovery_timeout: 10.0  # seconds
-    rotation_stop_distance: 0.30  # footprint radius plus safety margin
+    # Circumscribed footprint radius (0.17 m, camera nose) plus margin.
+    rotation_stop_distance: 0.22
 
     # Controller limits
     max_linear_speed: 0.10
-    max_angular_speed: 0.40
+    min_linear_speed: 0.03
+    max_angular_speed: 0.35
+    min_angular_speed: 0.10
     max_linear_acceleration: 0.20
     max_angular_acceleration: 0.80
 
     # Controller gains
     distance_kp: 0.40
-    heading_kp: 1.20
-    lateral_kp: 0.80
-    yaw_kp: 0.60
+    heading_kp: 0.80   # bearing hold while driving an entry leg
+    cross_track_kp: 1.20  # perpendicular deviation from the approach axis
+    yaw_kp: 0.40
 
-    # State transitions
-    coarse_approach_distance: 0.70
-    rotate_in_place_threshold: 0.35
+    # Corridor approach. The robot is placed on the dock's approach axis and
+    # then run down it; steering straight at the docked pose cuts the corner
+    # and sweeps the robot across the dock face.
+    corridor_half_width: 0.12   # inside this, no repositioning is needed
+    entry_margin: 0.05          # slack behind the docked pose before re-entry
+    entry_yaw_tolerance: 0.25
+    entry_position_tolerance: 0.06
+    align_yaw_tolerance: 0.05   # must be tighter than yaw_tolerance
+    overshoot_margin: 0.08      # must exceed distance_tolerance
+    approach_taper_distance: 0.25
+    enter_drive_abort_angle: 0.60  # re-aim rather than arc onto a waypoint
+    run_abort_yaw: 0.50
+    dock_keepout_radius: 0.35   # entry legs orbit rather than cross this
+    entry_arc_step: 0.50        # radians per arc leg when orbiting
+    max_corridor_replans: 3
+
+    # Tag anchoring. One detection carries enough angular noise to tilt the
+    # whole approach axis, so the first anchor is averaged and later ones are
+    # low-passed onto it.
+    anchor_samples: 5
+    anchor_timeout: 1.50
+    anchor_filter_alpha: 0.35
 
     # Final-pose tolerances
     distance_tolerance: 0.03
     lateral_tolerance: 0.03
     yaw_tolerance: 0.08
 
-    # Safety
+    # Safety. Stop distances are measured from base_footprint and must clear
+    # the circumscribed footprint radius of 0.17 m (the camera nose at 0.163 m),
+    # or the stop only fires once the robot has already made contact.
     minimum_tag_distance: 0.10
-    front_stop_distance: 0.10
+    front_stop_distance: 0.22
     front_sector_half_angle: 0.35
-    rear_stop_distance: 0.10
+    rear_stop_distance: 0.22
     rear_sector_half_angle: 0.35
+    # Inside final_distance + this band the dock fills the sector being driven
+    # into, so the directional stop is muted and minimum_tag_distance guards.
+    dock_contact_distance: 0.15
+    # Bearing half-width around the tag ignored by the rotation clearance.
+    rotation_clearance_exclusion: 0.60
     # lidar_link is mounted pi radians from base_footprint: pi=front, 0=rear.
     scan_forward_angle: 3.14159
-    # Bounds the odometry-guided portion after the front camera loses the tag.
-    max_reverse_distance: 1.00
+    # Bounds the odometry-guided rear-first leg, which now runs only from the
+    # staging distance to the final distance.
+    max_reverse_distance: 0.80
     sensor_timeout: 0.50
     command_timeout: 0.25
-    stop_on_tag_loss: true
     require_fresh_odometry: true
     require_fresh_scan: true
     tag_normal_sign: -1.0

@@ -24,13 +24,19 @@ from sensor_msgs.msg import LaserScan
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
 
+from my_robot_docking.approach_controller import (
+    ApproachConfig,
+    ApproachState,
+    CorridorApproachController,
+)
 from my_robot_docking.dock_database import DockDatabase, DockDatabaseError
 from my_robot_docking.docking_geometry import (
     Pose2D,
-    relative_control_error,
-    reverse_target_from_tag,
+    minimum_range_excluding_sector,
+    normalize_angle,
     scan_sector_clearances,
     target_pose_from_tag,
+    transform_pose,
 )
 from my_robot_docking.docking_visualization import (
     DockingStage,
@@ -89,7 +95,8 @@ class DockingServer(Node):
         self._odom_frame_id = 'odom'
         self._front_clearance = math.inf
         self._rear_clearance = math.inf
-        self._rotation_clearance = math.inf
+        self._scan_lock = threading.Lock()
+        self._scan = None
         self._last_command = Twist()
         self._last_command_time = time.monotonic()
 
@@ -159,10 +166,15 @@ class DockingServer(Node):
             callback_group=self.callback_group,
         )
 
+        self._log_database_warnings(self.database)
         self.get_logger().info(
             f'Docking server ready: action={self.dock_action}, '
             f'docks={self.database.ids()}'
         )
+
+    def _log_database_warnings(self, database):
+        for warning in database.warnings():
+            self.get_logger().warning(warning)
 
     def _reload_database(self, _request, response):
         with self._goal_lock:
@@ -181,6 +193,7 @@ class DockingServer(Node):
                 return response
             self.database = database
 
+        self._log_database_warnings(self.database)
         response.success = True
         response.message = f'Reloaded docks: {", ".join(self.database.ids())}'
         self.get_logger().info(response.message)
@@ -223,14 +236,31 @@ class DockingServer(Node):
             'max_angular_acceleration': 0.8,
             'distance_kp': 0.4,
             'heading_kp': 1.2,
-            'lateral_kp': 0.8,
+            'cross_track_kp': 1.2,
             'yaw_kp': 0.6,
-            'coarse_approach_distance': 0.7,
-            'rotate_in_place_threshold': 0.35,
             'distance_tolerance': 0.03,
             'lateral_tolerance': 0.03,
             'yaw_tolerance': 0.08,
             'minimum_tag_distance': 0.25,
+            'corridor_half_width': 0.12,
+            'entry_margin': 0.05,
+            'entry_yaw_tolerance': 0.25,
+            'entry_position_tolerance': 0.06,
+            'align_yaw_tolerance': 0.05,
+            'overshoot_margin': 0.08,
+            'min_linear_speed': 0.03,
+            'min_angular_speed': 0.10,
+            'approach_taper_distance': 0.25,
+            'enter_drive_abort_angle': 0.60,
+            'run_abort_yaw': 0.50,
+            'dock_keepout_radius': 0.35,
+            'entry_arc_step': 0.50,
+            'max_corridor_replans': 3,
+            'anchor_filter_alpha': 0.35,
+            'anchor_samples': 5,
+            'anchor_timeout': 1.5,
+            'rotation_clearance_exclusion': 0.60,
+            'dock_contact_distance': 0.05,
             'front_stop_distance': 0.18,
             'front_sector_half_angle': 0.35,
             'rear_stop_distance': 0.18,
@@ -239,7 +269,6 @@ class DockingServer(Node):
             'max_reverse_distance': 1.0,
             'sensor_timeout': 0.5,
             'command_timeout': 0.25,
-            'stop_on_tag_loss': True,
             'require_fresh_odometry': True,
             'require_fresh_scan': True,
             'tag_normal_sign': -1.0,
@@ -290,14 +319,31 @@ class DockingServer(Node):
             'max_angular_acceleration',
             'distance_kp',
             'heading_kp',
-            'lateral_kp',
+            'cross_track_kp',
             'yaw_kp',
-            'coarse_approach_distance',
-            'rotate_in_place_threshold',
             'distance_tolerance',
             'lateral_tolerance',
             'yaw_tolerance',
             'minimum_tag_distance',
+            'corridor_half_width',
+            'entry_margin',
+            'entry_yaw_tolerance',
+            'entry_position_tolerance',
+            'align_yaw_tolerance',
+            'overshoot_margin',
+            'min_linear_speed',
+            'min_angular_speed',
+            'approach_taper_distance',
+            'enter_drive_abort_angle',
+            'run_abort_yaw',
+            'dock_keepout_radius',
+            'entry_arc_step',
+            'max_corridor_replans',
+            'anchor_filter_alpha',
+            'anchor_samples',
+            'anchor_timeout',
+            'rotation_clearance_exclusion',
+            'dock_contact_distance',
             'front_stop_distance',
             'front_sector_half_angle',
             'rear_stop_distance',
@@ -306,7 +352,6 @@ class DockingServer(Node):
             'max_reverse_distance',
             'sensor_timeout',
             'command_timeout',
-            'stop_on_tag_loss',
             'require_fresh_odometry',
             'require_fresh_scan',
             'tag_normal_sign',
@@ -345,12 +390,25 @@ class DockingServer(Node):
             'max_angular_acceleration',
             'distance_kp',
             'heading_kp',
-            'lateral_kp',
+            'cross_track_kp',
             'yaw_kp',
             'distance_tolerance',
             'lateral_tolerance',
             'yaw_tolerance',
             'minimum_tag_distance',
+            'corridor_half_width',
+            'entry_yaw_tolerance',
+            'entry_position_tolerance',
+            'align_yaw_tolerance',
+            'overshoot_margin',
+            'min_linear_speed',
+            'min_angular_speed',
+            'approach_taper_distance',
+            'enter_drive_abort_angle',
+            'run_abort_yaw',
+            'dock_keepout_radius',
+            'entry_arc_step',
+            'anchor_timeout',
             'front_stop_distance',
             'front_sector_half_angle',
             'rear_stop_distance',
@@ -385,6 +443,28 @@ class DockingServer(Node):
             raise ValueError('scan_forward_angle must be finite')
         if self.visualization_maximum_points <= 0:
             raise ValueError('visualization_maximum_points must be positive')
+        if self.min_linear_speed > self.max_linear_speed:
+            raise ValueError('min_linear_speed cannot exceed max_linear_speed')
+        if self.min_angular_speed > self.max_angular_speed:
+            raise ValueError(
+                'min_angular_speed cannot exceed max_angular_speed'
+            )
+        if self.align_yaw_tolerance > self.entry_yaw_tolerance:
+            raise ValueError(
+                'align_yaw_tolerance cannot exceed entry_yaw_tolerance'
+            )
+        if self.overshoot_margin <= self.distance_tolerance:
+            raise ValueError('overshoot_margin must exceed distance_tolerance')
+        if self.entry_margin < 0.0:
+            raise ValueError('entry_margin cannot be negative')
+        if self.dock_contact_distance < 0.0:
+            raise ValueError('dock_contact_distance cannot be negative')
+        if self.anchor_samples < 1:
+            raise ValueError('anchor_samples must be at least one')
+        if self.max_corridor_replans < 0:
+            raise ValueError('max_corridor_replans cannot be negative')
+        if not 0.0 < self.anchor_filter_alpha <= 1.0:
+            raise ValueError('anchor_filter_alpha must be within (0, 1]')
 
     def _odom_callback(self, message):
         position = message.pose.pose.position
@@ -427,16 +507,41 @@ class DockingServer(Node):
             self.front_sector_half_angle,
             self.rear_sector_half_angle,
         )
-        self._rotation_clearance = min(
-            (
-                float(value)
-                for value in message.ranges
-                if math.isfinite(value)
-                and message.range_min <= value <= message.range_max
-            ),
-            default=math.inf,
-        )
+        with self._scan_lock:
+            self._scan = (
+                tuple(message.ranges),
+                float(message.angle_min),
+                float(message.angle_increment),
+                float(message.range_min),
+                float(message.range_max),
+            )
         self._last_scan_received_ns = self.get_clock().now().nanoseconds
+
+    def _rotation_clearance(self, exclude_bearing=None):
+        """Closest return that a rotation in place would sweep into.
+
+        Rotating sweeps the whole footprint, so every bearing matters -- except
+        the dock the robot is deliberately parked in front of, which would
+        otherwise dominate the minimum and veto every turn near a station.
+        """
+
+        with self._scan_lock:
+            scan = self._scan
+        if scan is None:
+            return math.inf
+
+        ranges, angle_min, angle_increment, range_min, range_max = scan
+        return minimum_range_excluding_sector(
+            ranges,
+            angle_min,
+            angle_increment,
+            range_min,
+            range_max,
+            self.scan_forward_angle,
+            0.0 if exclude_bearing is None else exclude_bearing,
+            0.0 if exclude_bearing is None
+            else self.rotation_clearance_exclusion,
+        )
 
     def _latest_odom_pose(self):
         with self._odom_lock:
@@ -483,6 +588,25 @@ class DockingServer(Node):
                 self.get_logger().warning('Invalid docking offset override')
                 return GoalResponse.REJECT
 
+        final_distance = (
+            float(request.final_distance)
+            if request.use_offset_override
+            else dock.final_distance
+        )
+        contact_band = final_distance + self.dock_contact_distance
+        approach_stop = (
+            self.rear_stop_distance
+            if dock.reverse_docking
+            else self.front_stop_distance
+        )
+        if approach_stop > contact_band:
+            self.get_logger().warning(
+                f'Dock {dock.dock_id}: the directional stop at '
+                f'{approach_stop:.3f} m fires before the dock face at '
+                f'{contact_band:.3f} m is reached; raise '
+                'dock_contact_distance or lower the stop distance'
+            )
+
         with self._goal_lock:
             if self._busy:
                 self.get_logger().warning('Docking server is already busy')
@@ -527,7 +651,6 @@ class DockingServer(Node):
                 yaw_offset,
             )
 
-            prepared_at_staging = not request.navigate_to_staging_pose
             if request.navigate_to_staging_pose:
                 navigation = self._navigate_to_predocking(
                     goal_handle,
@@ -562,38 +685,14 @@ class DockingServer(Node):
                         message,
                     )
                 if observation is not None:
-                    if not prepared_at_staging:
-                        outcome, message = self._prepare_at_staging(
-                            goal_handle,
-                            dock,
-                            lateral_offset,
-                            yaw_offset,
-                            attempt,
-                        )
-                        if outcome == ApproachOutcome.SUCCEEDED:
-                            prepared_at_staging = True
-                            observation = self.tag_tracker.latest(
-                                dock.tag_id,
-                                dock.tag_frame,
-                            )
-                            if observation is None:
-                                outcome = ApproachOutcome.TAG_LOST
-                                message = f'Lost tag {dock.tag_id}'
-
-                    if (
-                        prepared_at_staging
-                        and observation is not None
-                        and outcome in (None, ApproachOutcome.SUCCEEDED)
-                    ):
-                        outcome, message = self._approach_tag(
-                            goal_handle,
-                            dock,
-                            observation,
-                            final_distance,
-                            lateral_offset,
-                            yaw_offset,
-                            attempt,
-                        )
+                    outcome, message = self._approach_tag(
+                        goal_handle,
+                        dock,
+                        final_distance,
+                        lateral_offset,
+                        yaw_offset,
+                        attempt,
+                    )
 
                 if outcome == ApproachOutcome.SUCCEEDED:
                     self._stop_robot()
@@ -680,7 +779,6 @@ class DockingServer(Node):
                             Dock.Result.NAVIGATION_FAILED,
                             'Failed to return to predocking pose for retry',
                         )
-                    prepared_at_staging = False
 
             return self._abort_result(
                 goal_handle,
@@ -863,7 +961,7 @@ class DockingServer(Node):
                 self._stop_robot()
                 return observation, None, ''
 
-            safety = self._sensor_safety_reason(require_scan=False)
+            safety = self._search_safety_reason()
             if safety is not None:
                 self.get_logger().warning(safety)
                 self._stop_robot()
@@ -996,14 +1094,29 @@ class DockingServer(Node):
         finally:
             self._stop_robot()
 
+    def _search_safety_reason(self):
+        """The tag sweep is a rotation in place, so it needs the same guard."""
+
+        reason = self._sensor_safety_reason(require_scan=True)
+        if reason is not None:
+            return reason
+        clearance = self._rotation_clearance()
+        if clearance < self.rotation_stop_distance:
+            return (
+                f'Obstacle at {clearance:.3f} m is inside the '
+                f'{self.rotation_stop_distance:.3f} m rotation stop distance'
+            )
+        return None
+
     def _retry_recovery_safety_reason(self, rotating):
         reason = self._sensor_safety_reason(require_scan=True)
         if reason is not None:
             return reason
         if rotating:
-            if self._rotation_clearance < self.rotation_stop_distance:
+            clearance = self._rotation_clearance()
+            if clearance < self.rotation_stop_distance:
                 return (
-                    f'Obstacle at {self._rotation_clearance:.3f} m is inside '
+                    f'Obstacle at {clearance:.3f} m is inside '
                     f'the {self.rotation_stop_distance:.3f} m rotation '
                     'stop distance'
                 )
@@ -1019,273 +1132,131 @@ class DockingServer(Node):
         direction = 1.0 if retry_number % 2 == 1 else -1.0
         return direction * self.retry_rotation_angle
 
-    def _prepare_at_staging(
-        self,
-        goal_handle,
-        dock,
-        lateral_offset,
-        yaw_offset,
-        retries,
-    ):
-        self._visualization_call(
-            'set_stage',
-            DockingStage.PREDOCK_ALIGNMENT,
-        )
-        outcome, message = self._approach_forward_target(
-            goal_handle,
-            dock,
-            dock.predocking_distance,
-            lateral_offset,
-            yaw_offset,
-            retries,
-            Dock.Feedback.ALIGNING_PREDOCK,
-            Dock.Feedback.ALIGNING_PREDOCK,
-            'Predocking pose verified',
-            'predocking pose',
-        )
-        if outcome != ApproachOutcome.SUCCEEDED:
-            return outcome, message
-
-        self.get_logger().info(
-            f'Predocking alignment complete for {dock.dock_id}; '
-            'advancing to staging'
-        )
-        self._visualization_call(
-            'set_stage',
-            DockingStage.STAGING_APPROACH,
-        )
-        return self._approach_forward_target(
-            goal_handle,
-            dock,
-            dock.staging_distance,
-            lateral_offset,
-            yaw_offset,
-            retries,
-            Dock.Feedback.MOVING_TO_STAGING,
-            Dock.Feedback.VERIFYING_STAGING,
-            'Staging pose verified',
-            'staging pose',
+    def _approach_config(self):
+        return ApproachConfig(
+            corridor_half_width=self.corridor_half_width,
+            entry_margin=self.entry_margin,
+            entry_yaw_tolerance=self.entry_yaw_tolerance,
+            entry_position_tolerance=self.entry_position_tolerance,
+            align_yaw_tolerance=self.align_yaw_tolerance,
+            distance_tolerance=self.distance_tolerance,
+            lateral_tolerance=self.lateral_tolerance,
+            yaw_tolerance=self.yaw_tolerance,
+            overshoot_margin=self.overshoot_margin,
+            max_linear_speed=self.max_linear_speed,
+            min_linear_speed=self.min_linear_speed,
+            max_angular_speed=self.max_angular_speed,
+            min_angular_speed=self.min_angular_speed,
+            distance_kp=self.distance_kp,
+            heading_kp=self.heading_kp,
+            cross_track_kp=self.cross_track_kp,
+            yaw_kp=self.yaw_kp,
+            approach_taper_distance=self.approach_taper_distance,
+            enter_drive_abort_angle=self.enter_drive_abort_angle,
+            run_abort_yaw=self.run_abort_yaw,
+            dock_keepout_radius=self.dock_keepout_radius,
+            entry_arc_step=self.entry_arc_step,
+            max_corridor_replans=self.max_corridor_replans,
         )
 
     def _approach_tag(
         self,
         goal_handle,
         dock,
-        initial_observation,
         final_distance,
         lateral_offset,
         yaw_offset,
         retries,
     ):
-        if dock.reverse_docking:
-            self._visualization_call(
-                'set_stage',
-                DockingStage.REVERSE_FINAL,
-            )
-            return self._approach_reverse(
-                goal_handle,
-                dock,
-                initial_observation,
-                final_distance,
-                lateral_offset,
-                yaw_offset,
-                retries,
-            )
+        """Run one corridor approach to the dock's final pose.
 
+        The observation that ended the search is not reused: the approach
+        re-samples the tag so the axis it plans from is an average rather than
+        whichever single frame happened to break the search loop.
+        """
+
+        # Backing in enters the corridor at the staging distance so the blind
+        # rear-first leg stays short; driving in enters at the predocking
+        # distance, which leaves room to swing onto the axis.
+        entry_distance = (
+            dock.staging_distance
+            if dock.reverse_docking
+            else dock.predocking_distance
+        )
         self._visualization_call(
             'set_stage',
-            DockingStage.FINAL_APPROACH,
+            DockingStage.REVERSE_FINAL
+            if dock.reverse_docking
+            else DockingStage.FINAL_APPROACH,
         )
-        return self._approach_forward_target(
+        return self._run_corridor_approach(
             goal_handle,
             dock,
             final_distance,
+            entry_distance,
             lateral_offset,
             yaw_offset,
             retries,
-            None,
-            Dock.Feedback.VERIFYING,
-            'Dock pose verified',
-            'final docking pose',
+            reverse=dock.reverse_docking,
+            success_message=(
+                'Reverse dock pose verified'
+                if dock.reverse_docking
+                else 'Dock pose verified'
+            ),
+            target_name='final docking pose',
         )
 
-    def _approach_forward_target(
+    def _run_corridor_approach(
         self,
         goal_handle,
         dock,
         target_distance,
+        entry_distance,
         lateral_offset,
         yaw_offset,
         retries,
-        moving_state,
-        verifying_state,
+        reverse,
         success_message,
         target_name,
     ):
-        """Visually servo to one pose on the tag approach centerline."""
+        """Drive onto the dock's approach axis and then down it.
 
-        deadline = time.monotonic() + self.approach_timeout
-        period = 1.0 / self.control_rate
-        verification_started = None
-        last_tag_seen = time.monotonic()
+        The controller works in the odometry frame against a latched tag pose
+        that is refreshed whenever the tag is in view. Anchoring this way is
+        what lets the robot turn away from the dock during entry: the camera
+        looks forward over a limited field of view, so any manoeuvre that puts
+        the robot on the axis necessarily loses sight of the tag part way.
+        """
 
-        while rclpy.ok() and time.monotonic() < deadline:
-            if goal_handle.is_cancel_requested:
-                return ApproachOutcome.CANCELLED, 'Docking cancelled'
-
-            observation = self.tag_tracker.latest(dock.tag_id, dock.tag_frame)
-            if observation is None:
-                self._stop_robot()
-                if time.monotonic() - last_tag_seen >= self.tag_loss_grace_period:
-                    return ApproachOutcome.TAG_LOST, f'Lost tag {dock.tag_id}'
-                time.sleep(period)
-                continue
-            last_tag_seen = time.monotonic()
-            live_target = target_pose_from_tag(
-                Pose2D(
-                    observation.x,
-                    observation.y,
-                    observation.normal_yaw,
-                ),
-                target_distance,
-                lateral_offset,
-                yaw_offset,
-            )
-            self._visualization_call(
-                'update_live_target',
-                live_target,
-                self.base_frame,
-            )
-
-            safety = self._safety_reason(
-                math.hypot(observation.x, observation.y),
-                reverse=False,
-            )
-            if safety is not None:
-                self._stop_robot()
-                return ApproachOutcome.SAFETY_STOP, safety
-
-            (
-                command,
-                distance_error,
-                lateral_error,
-                yaw_error,
-                reached,
-                overshot,
-            ) = self._compute_command(
-                observation,
-                target_distance,
-                lateral_offset,
-                yaw_offset,
-            )
-
-            if overshot:
-                self._stop_robot()
-                return (
-                    ApproachOutcome.CONTROL_FAILED,
-                    f'Robot passed the configured {target_name}',
-                )
-
-            if reached:
-                self._stop_robot()
-                if verification_started is None:
-                    verification_started = time.monotonic()
-                self._publish_feedback(
-                    goal_handle,
-                    verifying_state,
-                    distance_error,
-                    lateral_error,
-                    yaw_error,
-                    retries,
-                )
-                if (
-                    time.monotonic() - verification_started
-                    >= self.verification_duration
-                ):
-                    return ApproachOutcome.SUCCEEDED, success_message
-            else:
-                verification_started = None
-                state = moving_state
-                if state is None:
-                    state = (
-                        Dock.Feedback.ALIGNING
-                        if distance_error <= self.coarse_approach_distance
-                        else Dock.Feedback.APPROACHING
-                    )
-                self._publish_feedback(
-                    goal_handle,
-                    state,
-                    distance_error,
-                    lateral_error,
-                    yaw_error,
-                    retries,
-                )
-                self._publish_dock_command(command)
-
-            time.sleep(period)
-
-        self._stop_robot()
-        return (
-            ApproachOutcome.TIMED_OUT,
-            f'Approach to {target_name} timed out',
-        )
-
-    def _approach_reverse(
-        self,
-        goal_handle,
-        dock,
-        initial_observation,
-        final_distance,
-        lateral_offset,
-        yaw_offset,
-        retries,
-    ):
-        """Rotate 180 degrees, then back into a tag-anchored odom goal."""
+        anchor = self._anchor_from_tag(dock)
+        if anchor is None:
+            return ApproachOutcome.TAG_LOST, f'Lost tag {dock.tag_id}'
 
         robot_pose = self._latest_odom_pose()
         if robot_pose is None:
             return ApproachOutcome.SAFETY_STOP, 'Odometry pose is unavailable'
 
-        target = reverse_target_from_tag(
-            robot_pose,
-            initial_observation.x,
-            initial_observation.y,
-            initial_observation.normal_yaw,
-            final_distance,
+        controller = CorridorApproachController(
+            self._approach_config(),
+            target_distance,
+            entry_distance,
             lateral_offset,
             yaw_offset,
+            reverse=reverse,
         )
-        self._visualization_call(
-            'update_live_target',
-            target.base_pose,
-            self._latest_odom_frame_id(),
-            robot_pose,
-        )
-        initial_error = relative_control_error(
-            robot_pose,
-            target.base_pose,
-            reverse=True,
-        )
-        if initial_error.distance > self.max_reverse_distance:
-            return (
-                ApproachOutcome.CONTROL_FAILED,
-                f'Reverse target is {initial_error.distance:.3f} m away, '
-                f'above the {self.max_reverse_distance:.3f} m limit',
-            )
+        controller.anchor(anchor)
 
-        self.get_logger().info(
-            f'Reverse docking {dock.dock_id}: captured tag target; '
-            'rotating 180 degrees before backing in'
-        )
         deadline = time.monotonic() + self.approach_timeout
         period = 1.0 / self.control_rate
-        rotating = True
         verification_started = None
-        reverse_distance_travelled = 0.0
-        previous_reverse_pose = None
+        last_tag_seen = time.monotonic()
+        reverse_travelled = 0.0
+        previous_pose = robot_pose
+        last_state = None
 
         while rclpy.ok() and time.monotonic() < deadline:
             if goal_handle.is_cancel_requested:
+                self._stop_robot()
                 return ApproachOutcome.CANCELLED, 'Docking cancelled'
 
             sensor_reason = self._sensor_safety_reason(require_scan=True)
@@ -1300,94 +1271,95 @@ class DockingServer(Node):
                     ApproachOutcome.SAFETY_STOP,
                     'Odometry pose is unavailable',
                 )
-            self._visualization_call(
-                'update_live_target',
-                target.base_pose,
-                self._latest_odom_frame_id(),
-                robot_pose,
-            )
+
+            observation = self.tag_tracker.latest(dock.tag_id, dock.tag_frame)
+            tag_fresh = observation is not None
+            if tag_fresh:
+                last_tag_seen = time.monotonic()
+                anchor = self._blend_pose(
+                    anchor,
+                    transform_pose(
+                        robot_pose,
+                        Pose2D(
+                            observation.x,
+                            observation.y,
+                            observation.normal_yaw,
+                        ),
+                    ),
+                )
+                controller.anchor(anchor)
+            elif (
+                controller.requires_tag
+                and time.monotonic() - last_tag_seen
+                >= self.tag_loss_grace_period
+            ):
+                self._stop_robot()
+                return ApproachOutcome.TAG_LOST, f'Lost tag {dock.tag_id}'
+
+            update = controller.update(robot_pose, tag_fresh)
+            error = update.error
+
+            if update.state != last_state:
+                self._log_corridor_state(dock, update, reverse)
+                self._visualization_call(
+                    'set_stage',
+                    self._corridor_stage(update.state, reverse),
+                )
+                last_state = update.state
+            goal_pose = controller.goal_pose()
+            if goal_pose is not None:
+                self._visualization_call(
+                    'update_live_target',
+                    update.waypoint or goal_pose,
+                    self._latest_odom_frame_id(),
+                    robot_pose,
+                )
 
             tag_distance = math.hypot(
-                target.tag_x - robot_pose.x,
-                target.tag_y - robot_pose.y,
+                anchor.x - robot_pose.x,
+                anchor.y - robot_pose.y,
             )
-            if tag_distance < self.minimum_tag_distance:
-                self._stop_robot()
-                return (
-                    ApproachOutcome.SAFETY_STOP,
-                    'Tag is inside the minimum safe distance',
-                )
-
-            error = relative_control_error(
+            safety = self._corridor_safety_reason(
+                update.state,
+                update.linear,
+                tag_distance,
+                target_distance,
+                anchor,
                 robot_pose,
-                target.base_pose,
-                reverse=True,
             )
-
-            if rotating:
-                if abs(error.yaw) <= self.yaw_tolerance:
-                    rotating = False
-                    previous_reverse_pose = robot_pose
-                    self._stop_robot()
-                    self.get_logger().info(
-                        'Reverse heading reached; beginning rear-first approach'
-                    )
-                    time.sleep(period)
-                    continue
-
-                command = Twist()
-                command.angular.z = self._clamp(
-                    self.heading_kp * error.yaw,
-                    -self.max_angular_speed,
-                    self.max_angular_speed,
-                )
-                self._publish_feedback(
-                    goal_handle,
-                    Dock.Feedback.ALIGNING,
-                    error.distance,
-                    error.lateral,
-                    error.yaw,
-                    retries,
-                )
-                self._publish_dock_command(command)
-                time.sleep(period)
-                continue
-
-            if previous_reverse_pose is not None:
-                reverse_distance_travelled += math.hypot(
-                    robot_pose.x - previous_reverse_pose.x,
-                    robot_pose.y - previous_reverse_pose.y,
-                )
-            previous_reverse_pose = robot_pose
-            if reverse_distance_travelled > self.max_reverse_distance:
-                self._stop_robot()
-                return (
-                    ApproachOutcome.CONTROL_FAILED,
-                    'Maximum reverse travel distance exceeded',
-                )
-
-            safety = self._safety_reason(tag_distance, reverse=True)
             if safety is not None:
                 self._stop_robot()
                 return ApproachOutcome.SAFETY_STOP, safety
 
-            command, reached, overshot = self._compute_reverse_command(error)
-            if overshot:
+            if update.linear < 0.0:
+                reverse_travelled += math.hypot(
+                    robot_pose.x - previous_pose.x,
+                    robot_pose.y - previous_pose.y,
+                )
+                if reverse_travelled > self.max_reverse_distance:
+                    self._stop_robot()
+                    return (
+                        ApproachOutcome.CONTROL_FAILED,
+                        'Maximum reverse travel distance exceeded',
+                    )
+            previous_pose = robot_pose
+
+            if update.overshot:
                 self._stop_robot()
                 return (
                     ApproachOutcome.CONTROL_FAILED,
-                    'Robot passed the configured reverse docking pose',
+                    f'Robot passed the configured {target_name}',
                 )
 
-            if reached:
+            if update.reached:
                 self._stop_robot()
                 if verification_started is None:
                     verification_started = time.monotonic()
                 self._publish_feedback(
                     goal_handle,
                     Dock.Feedback.VERIFYING,
-                    error.distance,
-                    error.lateral,
+                    error.along,
+                    error.cross,
                     error.yaw,
                     retries,
                 )
@@ -1395,155 +1367,197 @@ class DockingServer(Node):
                     time.monotonic() - verification_started
                     >= self.verification_duration
                 ):
-                    return (
-                        ApproachOutcome.SUCCEEDED,
-                        'Reverse dock pose verified',
-                    )
+                    return ApproachOutcome.SUCCEEDED, success_message
             else:
                 verification_started = None
-                state = (
-                    Dock.Feedback.ALIGNING
-                    if error.distance <= self.coarse_approach_distance
-                    else Dock.Feedback.APPROACHING
-                )
                 self._publish_feedback(
                     goal_handle,
-                    state,
-                    error.distance,
-                    error.lateral,
+                    self._corridor_feedback_state(update.state),
+                    error.along,
+                    error.cross,
                     error.yaw,
                     retries,
                 )
+                command = Twist()
+                command.linear.x = update.linear
+                command.angular.z = update.angular
                 self._publish_dock_command(command)
 
             time.sleep(period)
 
         self._stop_robot()
-        return ApproachOutcome.TIMED_OUT, 'Reverse dock approach timed out'
-
-    def _compute_reverse_command(self, error):
-        reached = (
-            error.distance <= self.distance_tolerance
-            and abs(error.lateral) <= self.lateral_tolerance
-            and abs(error.yaw) <= self.yaw_tolerance
-        )
-        overshot = (
-            error.longitudinal
-            < -max(self.distance_tolerance, 0.03)
-            and error.distance > self.distance_tolerance
-        )
-
-        command = Twist()
-        if reached or overshot:
-            return command, reached, overshot
-
-        if (
-            abs(error.heading) <= self.rotate_in_place_threshold
-            and abs(error.yaw) <= self.rotate_in_place_threshold
-        ):
-            linear_limit = self.max_linear_speed
-            if error.distance <= self.coarse_approach_distance:
-                linear_limit *= 0.5
-            speed = self._clamp(
-                self.distance_kp * max(0.0, error.longitudinal),
-                0.0,
-                linear_limit,
-            )
-            command.linear.x = -speed
-
-        angular = (
-            self.heading_kp * error.heading
-            - self.lateral_kp * error.lateral
-            + self.yaw_kp * error.yaw
-        )
-        command.angular.z = self._clamp(
-            angular,
-            -self.max_angular_speed,
-            self.max_angular_speed,
-        )
-        return command, reached, overshot
-
-    def _compute_command(
-        self,
-        observation,
-        final_distance,
-        lateral_offset,
-        yaw_offset,
-    ):
-        desired_yaw = self._normalize_angle(
-            observation.normal_yaw + yaw_offset
-        )
-        direction_x = math.cos(desired_yaw)
-        direction_y = math.sin(desired_yaw)
-        left_x = -direction_y
-        left_y = direction_x
-
-        target_x = (
-            observation.x
-            - final_distance * direction_x
-            + lateral_offset * left_x
-        )
-        target_y = (
-            observation.y
-            - final_distance * direction_y
-            + lateral_offset * left_y
-        )
-        distance_error = math.hypot(target_x, target_y)
-        lateral_error = target_y
-        yaw_error = desired_yaw
-        heading_error = math.atan2(target_y, target_x)
-        longitudinal_error = (
-            target_x * direction_x + target_y * direction_y
-        )
-
-        reached = (
-            distance_error <= self.distance_tolerance
-            and abs(lateral_error) <= self.lateral_tolerance
-            and abs(yaw_error) <= self.yaw_tolerance
-        )
-        overshot = (
-            longitudinal_error < -max(self.distance_tolerance, 0.03)
-            and distance_error > self.distance_tolerance
-        )
-
-        command = Twist()
-        if reached or overshot:
-            return (
-                command,
-                distance_error,
-                lateral_error,
-                yaw_error,
-                reached,
-                overshot,
-            )
-
-        if abs(heading_error) <= self.rotate_in_place_threshold:
-            linear_limit = self.max_linear_speed
-            if distance_error <= self.coarse_approach_distance:
-                linear_limit *= 0.5
-            command.linear.x = self._clamp(
-                self.distance_kp * max(0.0, target_x),
-                0.0,
-                linear_limit,
-            )
-
-        angular = (
-            self.heading_kp * heading_error
-            + self.lateral_kp * lateral_error
-            + self.yaw_kp * yaw_error
-        )
-        command.angular.z = self._clamp(
-            angular,
-            -self.max_angular_speed,
-            self.max_angular_speed,
-        )
         return (
-            command,
-            distance_error,
-            lateral_error,
-            yaw_error,
-            reached,
-            overshot,
+            ApproachOutcome.TIMED_OUT,
+            f'Approach to {target_name} timed out',
+        )
+
+    def _anchor_from_tag(self, dock):
+        """Average several observations into one odometry-frame tag pose.
+
+        A single detection carries enough angular noise to tilt the whole
+        approach axis, and the axis is what the entry legs are planned from,
+        so the first anchor is worth a few control periods to get right.
+        """
+
+        poses = []
+        stamps = set()
+        deadline = time.monotonic() + self.anchor_timeout
+        period = 1.0 / self.control_rate
+
+        while (
+            rclpy.ok()
+            and time.monotonic() < deadline
+            and len(poses) < self.anchor_samples
+        ):
+            observation = self.tag_tracker.latest(dock.tag_id, dock.tag_frame)
+            robot_pose = self._latest_odom_pose()
+            if (
+                observation is not None
+                and robot_pose is not None
+                and observation.stamp_seconds not in stamps
+            ):
+                stamps.add(observation.stamp_seconds)
+                poses.append(
+                    transform_pose(
+                        robot_pose,
+                        Pose2D(
+                            observation.x,
+                            observation.y,
+                            observation.normal_yaw,
+                        ),
+                    )
+                )
+                if len(poses) >= self.anchor_samples:
+                    break
+            time.sleep(period)
+
+        if not poses:
+            return None
+        return self._average_poses(poses)
+
+    @staticmethod
+    def _average_poses(poses):
+        """Circular mean of tag poses, minus the single worst outlier."""
+
+        def mean(samples):
+            count = float(len(samples))
+            return Pose2D(
+                x=sum(pose.x for pose in samples) / count,
+                y=sum(pose.y for pose in samples) / count,
+                yaw=math.atan2(
+                    sum(math.sin(pose.yaw) for pose in samples) / count,
+                    sum(math.cos(pose.yaw) for pose in samples) / count,
+                ),
+            )
+
+        centre = mean(poses)
+        if len(poses) >= 4:
+            worst = max(
+                poses,
+                key=lambda pose: math.hypot(
+                    pose.x - centre.x,
+                    pose.y - centre.y,
+                ),
+            )
+            poses = [pose for pose in poses if pose is not worst]
+            centre = mean(poses)
+        return centre
+
+    def _blend_pose(self, previous, measured):
+        """Low-pass a new tag observation onto the latched anchor."""
+
+        alpha = self.anchor_filter_alpha
+        if previous is None or alpha >= 1.0:
+            return measured
+        return Pose2D(
+            x=previous.x + alpha * (measured.x - previous.x),
+            y=previous.y + alpha * (measured.y - previous.y),
+            yaw=normalize_angle(
+                previous.yaw
+                + alpha * normalize_angle(measured.yaw - previous.yaw)
+            ),
+        )
+
+    def _corridor_safety_reason(
+        self,
+        state,
+        linear,
+        tag_distance,
+        target_distance,
+        anchor,
+        robot_pose,
+    ):
+        if tag_distance < self.minimum_tag_distance:
+            return 'Tag is inside the minimum safe distance'
+
+        if state in ApproachState.ROTATING:
+            bearing = normalize_angle(
+                math.atan2(
+                    anchor.y - robot_pose.y,
+                    anchor.x - robot_pose.x,
+                )
+                - robot_pose.yaw
+            )
+            clearance = self._rotation_clearance(exclude_bearing=bearing)
+            if clearance < self.rotation_stop_distance:
+                return (
+                    f'Obstacle at {clearance:.3f} m is inside the '
+                    f'{self.rotation_stop_distance:.3f} m rotation '
+                    'stop distance'
+                )
+            return None
+
+        if abs(linear) < 1e-6:
+            return None
+
+        # At the dock face the dock itself fills the sector being driven into,
+        # so the directional stop would fire on the target. minimum_tag_distance
+        # is the guard that remains inside that band.
+        if tag_distance <= target_distance + self.dock_contact_distance:
+            return None
+
+        reverse = linear < 0.0
+        clearance = self._rear_clearance if reverse else self._front_clearance
+        stop_distance = (
+            self.rear_stop_distance if reverse else self.front_stop_distance
+        )
+        direction = 'Rear' if reverse else 'Front'
+        if clearance < stop_distance:
+            return (
+                f'{direction} obstacle at {clearance:.3f} m is inside '
+                f'the {stop_distance:.3f} m stop distance'
+            )
+        return None
+
+    @staticmethod
+    def _corridor_stage(state, reverse):
+        if state in (ApproachState.ENTER_TURN, ApproachState.ENTER_DRIVE):
+            return DockingStage.STAGING_APPROACH
+        if state == ApproachState.ALIGN:
+            return DockingStage.PREDOCK_ALIGNMENT
+        return (
+            DockingStage.REVERSE_FINAL if reverse else DockingStage.FINAL_APPROACH
+        )
+
+    @staticmethod
+    def _corridor_feedback_state(state):
+        if state == ApproachState.ENTER_TURN:
+            return Dock.Feedback.ALIGNING_PREDOCK
+        if state == ApproachState.ENTER_DRIVE:
+            return Dock.Feedback.MOVING_TO_STAGING
+        if state == ApproachState.ALIGN:
+            return Dock.Feedback.ALIGNING
+        if state == ApproachState.REACHED:
+            return Dock.Feedback.VERIFYING
+        return Dock.Feedback.APPROACHING
+
+    def _log_corridor_state(self, dock, update, reverse):
+        mode = 'reverse' if reverse else 'forward'
+        error = update.error
+        self.get_logger().info(
+            f'Docking {dock.dock_id} ({mode}): {update.state} '
+            f'along={error.along:.3f} cross={error.cross:.3f} '
+            f'yaw={error.yaw:.3f}'
         )
 
     def _sensor_safety_reason(self, require_scan=True):
@@ -1559,25 +1573,6 @@ class DockingServer(Node):
             or now - self._last_scan_received_ns > timeout_ns
         ):
             return 'Laser scan is missing or stale'
-        return None
-
-    def _safety_reason(self, tag_distance, reverse):
-        reason = self._sensor_safety_reason(require_scan=True)
-        if reason is not None:
-            return reason
-        if tag_distance < self.minimum_tag_distance:
-            return 'Tag is inside the minimum safe distance'
-
-        clearance = self._rear_clearance if reverse else self._front_clearance
-        stop_distance = (
-            self.rear_stop_distance if reverse else self.front_stop_distance
-        )
-        direction = 'Rear' if reverse else 'Front'
-        if clearance < stop_distance:
-            return (
-                f'{direction} obstacle at {clearance:.3f} m is inside '
-                f'the {stop_distance:.3f} m stop distance'
-            )
         return None
 
     def _publish_dock_command(self, command):

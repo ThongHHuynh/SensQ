@@ -129,3 +129,62 @@ def test_rejects_invalid_distance_ordering(
 
     with pytest.raises(DockDatabaseError, match='predocking_distance'):
         DockDatabase(database_path)
+
+
+def test_reference_yaw_that_fights_the_approach_direction_is_reported(
+    tmp_path,
+):
+    """The two reference_pose conventions differ by about a quarter turn.
+
+    record_dock_pose stores the raw tag frame yaw, which lies in the tag
+    plane; a dock authored with staging_distance instead stores the approach
+    direction there. Reading one as the other aims the dock sideways, so the
+    disagreement has to surface at load time rather than on the floor.
+    """
+
+    database_path = tmp_path / 'recorded_docks.yaml'
+    write_recorded_schema_2_database(database_path)
+
+    database = DockDatabase(database_path)
+
+    assert len(database.warnings()) == 1
+    warning = database.warnings()[0]
+    assert 'recorded_dock' in warning
+    assert 'reference_pose yaw is ignored' in warning
+
+
+def test_consistent_reference_yaw_is_not_reported(tmp_path):
+    database_path = tmp_path / 'aligned_docks.yaml'
+    database_path.write_text(
+        yaml.safe_dump({
+            'schema_version': 2,
+            'docks': {
+                'aligned_dock': {
+                    'tag_id': 9,
+                    'tag_frame': 'tag_9',
+                    'global_frame': 'map',
+                    # Tag ahead of the robot along +x, so both conventions
+                    # agree that the approach direction is zero.
+                    'reference_pose': [2.0, 0.0, 0.0],
+                    'staging_pose': [1.0, 0.0, 0.0],
+                    'predocking_distance': 1.5,
+                    'final_distance': 0.3,
+                    'lateral_offset': 0.0,
+                    'yaw_offset': 0.0,
+                    'reverse_docking': False,
+                },
+            },
+        }),
+        encoding='utf-8',
+    )
+
+    assert DockDatabase(database_path).warnings() == ()
+
+
+def test_hand_authored_docks_report_nothing(tmp_path):
+    """staging_distance docks use reference_pose yaw, so there is no conflict."""
+
+    database_path = tmp_path / 'docks.yaml'
+    write_database(database_path)
+
+    assert DockDatabase(database_path).warnings() == ()

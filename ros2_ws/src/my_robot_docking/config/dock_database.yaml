@@ -1,4 +1,12 @@
-# Real-robot stations preserve recorded map poses and set explicit predocking distances.
+# Real-robot stations preserve recorded map poses and set explicit predocking
+# distances.
+#
+# These docks are written by record_dock_pose, so reference_pose is the raw
+# tag frame pose and its yaw lies in the tag plane, NOT along the approach
+# direction. The approach direction is derived from reference_pose minus
+# staging_pose, and reference_pose[2] is ignored. Do not copy these yaw values
+# into a dock defined with staging_distance: that form reads reference_pose[2]
+# as the approach direction and would aim the dock a quarter turn off.
 schema_version: 2
 
 docks:

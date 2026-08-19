@@ -81,7 +81,7 @@ class TagTracker:
                 self._base_frame,
                 tag_frame,
                 stamp,
-                timeout=Duration(seconds=0.0),
+                timeout=Duration(seconds=self._transform_timeout),
             )
         except TransformException:
             return None

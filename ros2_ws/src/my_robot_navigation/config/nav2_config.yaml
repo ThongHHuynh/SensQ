@@ -146,12 +146,12 @@ controller_server:
 
       xy_goal_tolerance: 0.08  # tightened for docking predock precision (was 0.1)
       min_vel_x: 0.0
-      max_vel_x: 0.80
+      max_vel_x: 0.20  # reverted from 0.80: at 4x speed, sim_time=1.0 rollouts drifted too far off-path before PathAlign/PathDist could correct
       max_vel_y: 0.0
       max_vel_theta: 1.5
 
       min_speed_xy: 0.0
-      max_speed_xy: 0.80
+      max_speed_xy: 0.40  # kept in sync with max_vel_x
       min_speed_theta: 0.0
 
       acc_lim_x: 0.5
@@ -225,7 +225,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 4.0
-        inflation_radius: 0.30
+        inflation_radius: 0.18  # was 0.30 (3x robot_radius 0.1) — hard-pruned most trajectories when starting near a wall/dock
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True

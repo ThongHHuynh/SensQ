@@ -13,7 +13,7 @@
                 planner_id="GridBased"/>
               <SmoothPath unsmoothed_path="{raw_path}" smoothed_path="{path}"
                 smoother_id="simple_smoother" max_smoothing_duration="0.10"
-                check_for_collisions="true"/>
+                check_for_collisions="false"/>
             </Sequence>
             <ClearEntireCostmap name="ClearGlobalCostmap-Context"
               service_name="global_costmap/clear_entirely_global_costmap"/>

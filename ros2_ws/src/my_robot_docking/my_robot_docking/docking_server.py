@@ -245,16 +245,14 @@ class DockingServer(Node):
             'corridor_half_width': 0.12,
             'entry_margin': 0.05,
             'entry_yaw_tolerance': 0.25,
-            'entry_position_tolerance': 0.06,
             'align_yaw_tolerance': 0.05,
             'overshoot_margin': 0.08,
             'min_linear_speed': 0.03,
             'min_angular_speed': 0.10,
             'approach_taper_distance': 0.25,
-            'enter_drive_abort_angle': 0.60,
             'run_abort_yaw': 0.50,
+            'entry_linear_speed': 0.03,
             'dock_keepout_radius': 0.35,
-            'entry_arc_step': 0.50,
             'max_corridor_replans': 3,
             'anchor_filter_alpha': 0.35,
             'anchor_samples': 5,
@@ -328,16 +326,14 @@ class DockingServer(Node):
             'corridor_half_width',
             'entry_margin',
             'entry_yaw_tolerance',
-            'entry_position_tolerance',
             'align_yaw_tolerance',
             'overshoot_margin',
             'min_linear_speed',
             'min_angular_speed',
             'approach_taper_distance',
-            'enter_drive_abort_angle',
             'run_abort_yaw',
+            'entry_linear_speed',
             'dock_keepout_radius',
-            'entry_arc_step',
             'max_corridor_replans',
             'anchor_filter_alpha',
             'anchor_samples',
@@ -398,16 +394,14 @@ class DockingServer(Node):
             'minimum_tag_distance',
             'corridor_half_width',
             'entry_yaw_tolerance',
-            'entry_position_tolerance',
             'align_yaw_tolerance',
             'overshoot_margin',
             'min_linear_speed',
             'min_angular_speed',
             'approach_taper_distance',
-            'enter_drive_abort_angle',
             'run_abort_yaw',
+            'entry_linear_speed',
             'dock_keepout_radius',
-            'entry_arc_step',
             'anchor_timeout',
             'front_stop_distance',
             'front_sector_half_angle',
@@ -1137,7 +1131,6 @@ class DockingServer(Node):
             corridor_half_width=self.corridor_half_width,
             entry_margin=self.entry_margin,
             entry_yaw_tolerance=self.entry_yaw_tolerance,
-            entry_position_tolerance=self.entry_position_tolerance,
             align_yaw_tolerance=self.align_yaw_tolerance,
             distance_tolerance=self.distance_tolerance,
             lateral_tolerance=self.lateral_tolerance,
@@ -1148,14 +1141,12 @@ class DockingServer(Node):
             max_angular_speed=self.max_angular_speed,
             min_angular_speed=self.min_angular_speed,
             distance_kp=self.distance_kp,
-            heading_kp=self.heading_kp,
             cross_track_kp=self.cross_track_kp,
             yaw_kp=self.yaw_kp,
             approach_taper_distance=self.approach_taper_distance,
-            enter_drive_abort_angle=self.enter_drive_abort_angle,
             run_abort_yaw=self.run_abort_yaw,
+            entry_linear_speed=self.entry_linear_speed,
             dock_keepout_radius=self.dock_keepout_radius,
-            entry_arc_step=self.entry_arc_step,
             max_corridor_replans=self.max_corridor_replans,
         )
 
@@ -1351,6 +1342,13 @@ class DockingServer(Node):
                     f'Robot passed the configured {target_name}',
                 )
 
+            if update.stuck:
+                self._stop_robot()
+                return (
+                    ApproachOutcome.CONTROL_FAILED,
+                    'Corridor replans exhausted without converging',
+                )
+
             if update.reached:
                 self._stop_robot()
                 if verification_started is None:
@@ -1531,7 +1529,7 @@ class DockingServer(Node):
 
     @staticmethod
     def _corridor_stage(state, reverse):
-        if state in (ApproachState.ENTER_TURN, ApproachState.ENTER_DRIVE):
+        if state in (ApproachState.ENTER_ARC, ApproachState.RETREAT):
             return DockingStage.STAGING_APPROACH
         if state == ApproachState.ALIGN:
             return DockingStage.PREDOCK_ALIGNMENT
@@ -1541,9 +1539,7 @@ class DockingServer(Node):
 
     @staticmethod
     def _corridor_feedback_state(state):
-        if state == ApproachState.ENTER_TURN:
-            return Dock.Feedback.ALIGNING_PREDOCK
-        if state == ApproachState.ENTER_DRIVE:
+        if state in (ApproachState.ENTER_ARC, ApproachState.RETREAT):
             return Dock.Feedback.MOVING_TO_STAGING
         if state == ApproachState.ALIGN:
             return Dock.Feedback.ALIGNING

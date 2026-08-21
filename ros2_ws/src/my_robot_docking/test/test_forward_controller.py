@@ -25,7 +25,6 @@ def make_config(**overrides):
         corridor_half_width=0.12,
         entry_margin=0.05,
         entry_yaw_tolerance=0.25,
-        entry_position_tolerance=0.06,
         align_yaw_tolerance=0.05,
         distance_tolerance=0.03,
         lateral_tolerance=0.03,
@@ -36,14 +35,12 @@ def make_config(**overrides):
         max_angular_speed=0.35,
         min_angular_speed=0.10,
         distance_kp=0.40,
-        heading_kp=0.80,
         cross_track_kp=1.20,
         yaw_kp=0.40,
         approach_taper_distance=0.25,
-        enter_drive_abort_angle=0.60,
         run_abort_yaw=0.50,
+        entry_linear_speed=0.03,
         dock_keepout_radius=0.35,
-        entry_arc_step=0.50,
         max_corridor_replans=3,
     )
     values.update(overrides)
@@ -89,21 +86,38 @@ def test_ninety_degree_approach_is_not_reported_as_overshoot():
 
     assert update.error.along < 0.0
     assert not update.overshot
-    assert update.state == ApproachState.ENTER_TURN
+    assert update.state == ApproachState.RETREAT
 
 
-def test_ninety_degree_approach_turns_toward_the_corridor_entry():
+def test_ninety_degree_approach_backs_clear_of_the_corridor_first():
+    """This start sits level with the tag but far off axis -- past the
+    corridor mouth in along-axis terms, which the walled corridor makes
+    physically unreachable except by drifting there. Backing straight out
+    (no steering) is the safe recovery; ``ENTER_ARC`` only ever runs once
+    back in the open region beyond the mouth."""
+
     controller = make_controller()
 
     update = controller.update(Pose2D(0.0, -1.5, math.pi / 2.0), tag_fresh=True)
 
-    assert update.linear == pytest.approx(0.0)
-    assert update.waypoint is not None
-    # The entry point is on the axis, one entry distance out in front.
-    assert update.waypoint.x == pytest.approx(ENTRY_DISTANCE, abs=1e-6)
-    assert update.waypoint.y == pytest.approx(0.0, abs=1e-6)
-    # Facing +y, the entry point is off to the right, so the robot turns right.
+    assert update.state == ApproachState.RETREAT
+    assert update.linear < 0.0
+    assert update.waypoint is None
+
+
+def test_off_axis_start_beyond_the_mouth_curves_in_while_driving():
+    """Comfortably beyond the corridor mouth, off axis: this is the genuine
+    ENTER_ARC case -- steer and drive at once, a real curve rather than a
+    stop-turn-then-drive polyline."""
+
+    controller = make_controller()
+
+    update = controller.update(Pose2D(1.2, -0.3, math.pi), tag_fresh=True)
+
+    assert update.state == ApproachState.ENTER_ARC
+    assert update.linear > 0.0
     assert update.angular < 0.0
+    assert update.waypoint is None
 
 
 def test_one_eighty_approach_aligns_in_place_without_repositioning():
@@ -180,7 +194,7 @@ def test_starting_behind_the_goal_repositions_instead_of_aborting():
 
     update = controller.update(Pose2D(0.15, 0.0, math.pi), tag_fresh=True)
 
-    assert update.state == ApproachState.ENTER_TURN
+    assert update.state == ApproachState.RETREAT
     assert not update.overshot
 
 
@@ -235,7 +249,7 @@ def test_entry_legs_tolerate_losing_the_tag():
 
     controller.update(Pose2D(0.0, -1.5, math.pi / 2.0), tag_fresh=True)
 
-    assert controller.state == ApproachState.ENTER_TURN
+    assert controller.state == ApproachState.RETREAT
     assert not controller.requires_tag
 
 

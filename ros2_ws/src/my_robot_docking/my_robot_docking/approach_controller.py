@@ -3,8 +3,18 @@
 The robot is driven onto the dock's approach axis and then down it, instead of
 being driven straight at the docked pose. Steering at the pose cuts the corner
 on angled approaches, which sweeps the robot across the dock face; running the
-axis cannot. Every phase is either a rotation in place or a straight line, so
-the executed path stays predictable and the swept area is bounded.
+axis cannot.
+
+Getting onto the axis is itself a continuous curve (``ENTER_ARC``), not a
+sequence of point turns and straight legs: it is recomputed every tick from
+wherever the robot actually is, with steering and translation happening at
+once, so it adapts to drift instead of chasing a plan made once at the start.
+The dock sits at the end of a walled corridor, so that curve is only safe far
+enough from the tag; too close while still off axis, or out of along-axis
+room to keep curving, ``RETREAT`` backs the robot into open space before
+``ENTER_ARC`` tries again. ``ALIGN`` and ``RUN`` remain a rotation in place
+and a straight line respectively, so the swept area stays bounded once the
+robot is actually on the axis.
 
 The controller is deliberately free of ROS types: it consumes plain
 :class:`~my_robot_docking.docking_geometry.Pose2D` values in one fixed frame
@@ -14,13 +24,13 @@ testable without a running graph.
 
 from dataclasses import dataclass
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 from my_robot_docking.docking_geometry import (
     CorridorError,
     Pose2D,
     corridor_error,
-    entry_waypoints,
+    entry_steering,
     normalize_angle,
 )
 
@@ -28,13 +38,13 @@ from my_robot_docking.docking_geometry import (
 class ApproachState:
     """Phases of a corridor approach, in the order they normally occur."""
 
-    ENTER_TURN = 'enter_turn'
-    ENTER_DRIVE = 'enter_drive'
+    ENTER_ARC = 'enter_arc'
+    RETREAT = 'retreat'
     ALIGN = 'align'
     RUN = 'run'
     REACHED = 'reached'
 
-    ROTATING = (ENTER_TURN, ALIGN)
+    ROTATING = (ALIGN,)
 
 
 @dataclass(frozen=True)
@@ -44,7 +54,6 @@ class ApproachConfig:
     corridor_half_width: float
     entry_margin: float
     entry_yaw_tolerance: float
-    entry_position_tolerance: float
     align_yaw_tolerance: float
     distance_tolerance: float
     lateral_tolerance: float
@@ -55,14 +64,12 @@ class ApproachConfig:
     max_angular_speed: float
     min_angular_speed: float
     distance_kp: float
-    heading_kp: float
     cross_track_kp: float
     yaw_kp: float
     approach_taper_distance: float
-    enter_drive_abort_angle: float
     run_abort_yaw: float
+    entry_linear_speed: float
     dock_keepout_radius: float
-    entry_arc_step: float
     max_corridor_replans: int
 
 
@@ -78,6 +85,7 @@ class ApproachCommand:
     overshot: bool
     waypoint: Optional[Pose2D]
     replanned: bool
+    stuck: bool
 
 
 class CorridorApproachController:
@@ -104,7 +112,6 @@ class CorridorApproachController:
 
         self._tag_pose: Optional[Pose2D] = None
         self._state: Optional[str] = None
-        self._waypoints: Tuple[Pose2D, ...] = ()
         self._turn_direction = 1.0
         self._replans = 0
 
@@ -178,14 +185,12 @@ class CorridorApproachController:
         error = self._error(robot_pose)
 
         if self._state is None:
-            self._state = self._initial_state(error)
-            if self._state == ApproachState.ENTER_TURN:
-                self._plan_entry(robot_pose)
+            self._state = self._initial_state(robot_pose, error)
 
-        if self._state == ApproachState.ENTER_TURN:
-            return self._enter_turn(robot_pose, error, tag_fresh)
-        if self._state == ApproachState.ENTER_DRIVE:
-            return self._enter_drive(robot_pose, error, tag_fresh)
+        if self._state == ApproachState.ENTER_ARC:
+            return self._enter_arc(robot_pose, error, tag_fresh)
+        if self._state == ApproachState.RETREAT:
+            return self._retreat(robot_pose, error, tag_fresh)
         if self._state == ApproachState.ALIGN:
             return self._align(robot_pose, error, tag_fresh)
         if self._state == ApproachState.RUN:
@@ -203,7 +208,7 @@ class CorridorApproachController:
     # States
     # ------------------------------------------------------------------
 
-    def _initial_state(self, error: CorridorError) -> str:
+    def _initial_state(self, robot_pose: Pose2D, error: CorridorError) -> str:
         """Pick the cheapest phase that can still reach the dock safely.
 
         Being off the axis or behind the docked pose needs repositioning; a
@@ -211,7 +216,7 @@ class CorridorApproachController:
         """
 
         if self._off_corridor(error):
-            return ApproachState.ENTER_TURN
+            return self._entry_state(robot_pose)
         if abs(error.yaw) > self.config.align_yaw_tolerance:
             return ApproachState.ALIGN
         return ApproachState.RUN
@@ -222,77 +227,117 @@ class CorridorApproachController:
             or error.along < -self.config.entry_margin
         )
 
-    def _enter_turn(self, robot_pose, error, tag_fresh) -> ApproachCommand:
-        waypoint = self._current_waypoint()
-        if waypoint is None:
-            return self._transition_out_of_entry(robot_pose, error, tag_fresh)
-
-        bearing = math.atan2(
-            waypoint.y - robot_pose.y,
-            waypoint.x - robot_pose.x,
-        )
-        heading_error = normalize_angle(bearing - robot_pose.yaw)
-
-        if abs(heading_error) <= self.config.align_yaw_tolerance:
-            self._state = ApproachState.ENTER_DRIVE
-            return self._enter_drive(robot_pose, error, tag_fresh)
-
-        return self._command(
-            0.0,
-            self._rotate(heading_error),
-            error,
-            waypoint=waypoint,
+    def _distance_to_tag(self, robot_pose: Pose2D) -> float:
+        return math.hypot(
+            robot_pose.x - self._tag_pose.x, robot_pose.y - self._tag_pose.y
         )
 
-    def _enter_drive(self, robot_pose, error, tag_fresh) -> ApproachCommand:
-        waypoint = self._current_waypoint()
-        if waypoint is None:
-            return self._transition_out_of_entry(robot_pose, error, tag_fresh)
+    def _entry_state(self, robot_pose: Pose2D) -> str:
+        """Choose between curving in and backing clear of the dock.
 
-        delta_x = waypoint.x - robot_pose.x
-        delta_y = waypoint.y - robot_pose.y
-        remaining = math.hypot(delta_x, delta_y)
+        Distance to the tag -- not along-axis position -- is what the walled
+        section of the corridor actually scales with (it constrains lateral
+        movement "for some distance out from the tag", not for the whole
+        approach), so it is what decides whether a curve is still safe.
+        """
 
-        if remaining <= self.config.entry_position_tolerance:
-            self._waypoints = self._waypoints[1:]
-            if self._waypoints:
-                self._state = ApproachState.ENTER_TURN
-                return self._enter_turn(robot_pose, error, tag_fresh)
-            return self._transition_out_of_entry(robot_pose, error, tag_fresh)
+        if self._distance_to_tag(robot_pose) <= self.config.dock_keepout_radius:
+            return ApproachState.RETREAT
+        return ApproachState.ENTER_ARC
 
-        heading_error = normalize_angle(
-            math.atan2(delta_y, delta_x) - robot_pose.yaw
-        )
-        if abs(heading_error) > self.config.enter_drive_abort_angle:
-            self._state = ApproachState.ENTER_TURN
-            return self._enter_turn(robot_pose, error, tag_fresh)
+    def _entry_yaw(self, error: CorridorError) -> float:
+        """Heading error against the forward (nose-first) axis direction.
 
-        # Close to the waypoint the bearing is dominated by noise, so the leg
-        # is finished straight rather than chasing an ill-conditioned angle.
-        angular = 0.0
-        if remaining > 2.0 * self.config.entry_position_tolerance:
-            angular = self._clamp(
-                self.config.heading_kp * heading_error,
-                -self.config.max_angular_speed,
-                self.config.max_angular_speed,
-            )
+        Entry always drives forward regardless of ``self.reverse`` so the
+        camera keeps the tag in view as long as possible; ``error.yaw`` is
+        measured against the backing heading when reversing, so it is
+        rotated back here.
+        """
 
-        return self._command(
-            self._linear_speed(remaining),
-            angular,
-            error,
-            waypoint=waypoint,
+        return (
+            normalize_angle(error.yaw + math.pi) if self.reverse else error.yaw
         )
 
-    def _transition_out_of_entry(
-        self,
-        robot_pose,
-        error,
-        tag_fresh,
-    ) -> ApproachCommand:
-        self._waypoints = ()
-        self._state = ApproachState.ALIGN
-        return self._align(robot_pose, error, tag_fresh)
+    def _enter_arc(self, robot_pose, error, tag_fresh) -> ApproachCommand:
+        # corridor_half_width is a coarse "no repositioning needed at all"
+        # bound, not a safe hand-off point: the run phase's Stanley term
+        # divides by along-axis speed, which the taper deliberately shrinks
+        # near the goal, so handing off with a residual cross error that
+        # size at low speed saturates its steering. Requiring the same
+        # precision the run phase already targets for itself keeps every
+        # hand-off within the range that steering can actually condition on.
+        #
+        # Yaw is deliberately not part of this test: it converges
+        # asymptotically and can take much longer than cross to close, and
+        # this phase has no notion of overshoot, so waiting on it here would
+        # mean driving straight through the goal at a constant speed while
+        # still waiting. Align's in-place rotation is what finishes heading
+        # convergence -- it does not move the robot, so it cannot re-open
+        # the cross error this phase just closed.
+        if abs(error.cross) <= self.config.lateral_tolerance:
+            self._state = ApproachState.ALIGN
+            return self._align(robot_pose, error, tag_fresh)
+
+        # Close to the tag is only dangerous while still meaningfully off
+        # axis (about to graze the dock from the side); close and already
+        # converging is just the ordinary final approach and must be left
+        # to finish rather than punted into a retreat it does not need.
+        #
+        # A large enough initial cross error can take more along-axis
+        # distance to close than remains before the docked pose -- this
+        # phase runs at a constant speed with no overshoot check of its own
+        # (unlike run, which zeroes its speed past ``along <= 0``), so
+        # without this it would cruise straight through the goal still
+        # curving. Running out of runway is exactly the unsafe case retreat
+        # exists for, regardless of how close cross already is.
+        if (
+            abs(error.cross) > self.config.corridor_half_width
+            and self._distance_to_tag(robot_pose) <= self.config.dock_keepout_radius
+        ) or error.along <= 0.0:
+            self._state = ApproachState.RETREAT
+            return self._retreat(robot_pose, error, tag_fresh)
+
+        angular = entry_steering(
+            error.cross,
+            self._entry_yaw(error),
+            self.config.cross_track_kp,
+            self.config.yaw_kp,
+            self.config.max_angular_speed,
+        )
+        return self._command(self.config.entry_linear_speed, angular, error)
+
+    def _retreat(self, robot_pose, error, tag_fresh) -> ApproachCommand:
+        # Hysteresis against ``ENTER_ARC``'s own thresholds: entering the
+        # curve drives toward the tag, which shrinks the keepout margin (and
+        # ``along``) again, so leaving right at either entry threshold
+        # chatters between the two every tick with no net progress. Backing
+        # out has to clear both by a real margin before the curve is allowed
+        # to try again -- in particular ``along`` must clear zero, or the two
+        # states call each other back and forth against the same error with
+        # no robot motion in between.
+        clear_radius = self.config.dock_keepout_radius + self.config.entry_margin
+        if (
+            self._distance_to_tag(robot_pose) > clear_radius
+            and error.along > self.config.entry_margin
+        ):
+            self._state = ApproachState.ENTER_ARC
+            return self._enter_arc(robot_pose, error, tag_fresh)
+
+        # Backing straight along whatever heading the robot happens to hold
+        # does not, in general, move it along the corridor axis at all (a
+        # heading perpendicular to the axis backs it further off-axis
+        # instead). Steering the nose toward the corridor's forward
+        # direction while driving in reverse means the resulting motion
+        # heads away from the tag once the nose gets there, the same
+        # nose/motion-direction relationship the run phase already relies
+        # on for reverse docking. No cross-track term here: centering on the
+        # axis is ``ENTER_ARC``'s job once back in the open region.
+        angular = self._clamp(
+            self.config.yaw_kp * self._entry_yaw(error),
+            -self.config.max_angular_speed,
+            self.config.max_angular_speed,
+        )
+        return self._command(-self.config.entry_linear_speed, angular, error)
 
     def _align(self, robot_pose, error, tag_fresh) -> ApproachCommand:
         aligned = abs(error.yaw) <= self.config.align_yaw_tolerance
@@ -343,11 +388,11 @@ class CorridorApproachController:
             abs(error.cross) > 1.5 * self.config.corridor_half_width
             or abs(error.yaw) > self.config.run_abort_yaw
         ):
-            if self._replans < self.config.max_corridor_replans:
-                self._replans += 1
-                self._state = ApproachState.ENTER_TURN
-                self._plan_entry(robot_pose)
-                return self._command(0.0, 0.0, error, replanned=True)
+            if self._replans >= self.config.max_corridor_replans:
+                return self._command(0.0, 0.0, error, stuck=True)
+            self._replans += 1
+            self._state = self._entry_state(robot_pose)
+            return self._command(0.0, 0.0, error, replanned=True)
 
         speed = self._linear_speed(max(error.along, 0.0))
         if error.along <= 0.0:
@@ -385,20 +430,6 @@ class CorridorApproachController:
             self.yaw_offset,
             reverse=self.reverse,
         )
-
-    def _plan_entry(self, robot_pose: Pose2D) -> None:
-        self._waypoints = entry_waypoints(
-            robot_pose,
-            self._tag_pose,
-            self.entry_distance,
-            self.lateral_offset,
-            self.yaw_offset,
-            self.config.dock_keepout_radius,
-            self.config.entry_arc_step,
-        )
-
-    def _current_waypoint(self) -> Optional[Pose2D]:
-        return self._waypoints[0] if self._waypoints else None
 
     def _rotate(self, yaw_error: float) -> float:
         """Rotate in place toward ``yaw_error`` on a committed direction.
@@ -446,6 +477,7 @@ class CorridorApproachController:
         overshot=False,
         waypoint=None,
         replanned=False,
+        stuck=False,
     ) -> ApproachCommand:
         return ApproachCommand(
             linear=float(linear),
@@ -456,6 +488,7 @@ class CorridorApproachController:
             overshot=overshot,
             waypoint=waypoint,
             replanned=replanned,
+            stuck=stuck,
         )
 
     @staticmethod

@@ -209,100 +209,26 @@ def corridor_error(
     )
 
 
-def segment_point_distance(
-    start_x: float,
-    start_y: float,
-    end_x: float,
-    end_y: float,
-    point_x: float,
-    point_y: float,
+def entry_steering(
+    cross: float,
+    yaw: float,
+    cross_track_gain: float,
+    yaw_gain: float,
+    max_angular_speed: float,
 ) -> float:
-    """Return the shortest distance from a point to a finite segment."""
+    """Speed-independent steering rate that curves onto the approach axis.
 
-    segment_x = end_x - start_x
-    segment_y = end_y - start_y
-    length_squared = segment_x * segment_x + segment_y * segment_y
-    if length_squared <= 1e-12:
-        return math.hypot(point_x - start_x, point_y - start_y)
-
-    projection = (
-        (point_x - start_x) * segment_x + (point_y - start_y) * segment_y
-    ) / length_squared
-    projection = max(0.0, min(1.0, projection))
-    closest_x = start_x + projection * segment_x
-    closest_y = start_y + projection * segment_y
-    return math.hypot(point_x - closest_x, point_y - closest_y)
-
-
-def entry_waypoints(
-    robot_pose: Pose2D,
-    tag_pose: Pose2D,
-    entry_distance: float,
-    lateral_offset: float,
-    yaw_offset: float,
-    keepout_radius: float,
-    arc_step_angle: float,
-) -> tuple:
-    """Plan the legs that place the robot on the approach axis.
-
-    The last waypoint is always the corridor entry point. When the straight run
-    to it would pass closer to the tag than ``keepout_radius``, the robot is
-    first pushed radially clear and then walks an arc around the tag, so it
-    never crosses the dock face on the way in.
+    Same structure and sign convention as the run phase's Stanley law
+    (``yaw_kp * yaw + atan2(cross_track_kp * cross, speed)``), with the
+    ``speed`` denominator dropped in favour of a plain ``atan``. Dividing by
+    speed is what let the old entry logic saturate into a stationary spin
+    whenever the commanded speed was near zero; this law stays well defined
+    even while the robot is holding a constant creep speed through a large
+    heading correction.
     """
 
-    axis_yaw = normalize_angle(tag_pose.yaw + yaw_offset)
-    forward_x = math.cos(axis_yaw)
-    forward_y = math.sin(axis_yaw)
-    entry = Pose2D(
-        x=(
-            tag_pose.x
-            - entry_distance * forward_x
-            + lateral_offset * -forward_y
-        ),
-        y=(
-            tag_pose.y
-            - entry_distance * forward_y
-            + lateral_offset * forward_x
-        ),
-        yaw=axis_yaw,
-    )
-
-    clearance = segment_point_distance(
-        robot_pose.x,
-        robot_pose.y,
-        entry.x,
-        entry.y,
-        tag_pose.x,
-        tag_pose.y,
-    )
-    if clearance >= keepout_radius:
-        return (entry,)
-
-    radius = max(
-        entry_distance,
-        math.hypot(robot_pose.x - tag_pose.x, robot_pose.y - tag_pose.y),
-    )
-    start_bearing = math.atan2(
-        robot_pose.y - tag_pose.y,
-        robot_pose.x - tag_pose.x,
-    )
-    end_bearing = math.atan2(entry.y - tag_pose.y, entry.x - tag_pose.x)
-    sweep = normalize_angle(end_bearing - start_bearing)
-    steps = max(1, int(math.ceil(abs(sweep) / max(arc_step_angle, 1e-3))))
-
-    waypoints = []
-    for index in range(steps):
-        bearing = start_bearing + sweep * (index / steps)
-        waypoints.append(
-            Pose2D(
-                x=tag_pose.x + radius * math.cos(bearing),
-                y=tag_pose.y + radius * math.sin(bearing),
-                yaw=normalize_angle(bearing + math.pi),
-            )
-        )
-    waypoints.append(entry)
-    return tuple(waypoints)
+    angular = yaw_gain * yaw + math.atan(cross_track_gain * cross)
+    return max(-max_angular_speed, min(max_angular_speed, angular))
 
 
 def scan_sector_clearances(

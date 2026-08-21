@@ -7,10 +7,9 @@ import pytest
 from my_robot_docking.docking_geometry import (
     Pose2D,
     corridor_error,
-    entry_waypoints,
+    entry_steering,
     minimum_range_excluding_sector,
     normalize_angle,
-    segment_point_distance,
     transform_pose,
 )
 
@@ -89,68 +88,39 @@ def test_transform_pose_round_trips_through_a_moved_frame():
     assert back.yaw == pytest.approx(local.yaw)
 
 
-def test_segment_point_distance_clamps_to_the_endpoints():
-    assert segment_point_distance(0, 0, 1, 0, 2, 0) == pytest.approx(1.0)
-    assert segment_point_distance(0, 0, 1, 0, 0.5, 0.25) == pytest.approx(0.25)
-    assert segment_point_distance(0, 0, 0, 0, 3, 4) == pytest.approx(5.0)
+def test_entry_steering_is_zero_when_already_on_axis():
+    assert entry_steering(0.0, 0.0, 1.2, 0.4, 0.35) == pytest.approx(0.0)
 
 
-def test_clear_run_to_the_entry_point_is_a_single_leg():
-    waypoints = entry_waypoints(
-        Pose2D(0.0, -1.5, math.pi / 2.0),
-        TAG,
-        entry_distance=1.0,
-        lateral_offset=0.0,
-        yaw_offset=0.0,
-        keepout_radius=0.35,
-        arc_step_angle=0.5,
-    )
+def test_entry_steering_points_at_the_axis_when_far_off_it():
+    """A robot far off the centerline should steer hard toward it, bounded
+    by max_angular_speed rather than the raw proportional term."""
 
-    assert len(waypoints) == 1
-    assert waypoints[0].x == pytest.approx(1.0)
-    assert waypoints[0].y == pytest.approx(0.0, abs=1e-9)
+    angular = entry_steering(5.0, 0.0, 1.2, 0.4, 0.35)
+
+    assert angular == pytest.approx(0.35)
 
 
-def test_a_run_that_would_cross_the_dock_face_orbits_instead():
-    """From behind the dock, the straight line to the entry point runs over
-    the tag, so the legs must go around it."""
+def test_entry_steering_sign_matches_the_run_phase_convention():
+    """A positive cross-track error (goal to the robot's left) should steer
+    the same direction the run phase's Stanley term already does."""
 
-    robot = Pose2D(-1.0, 0.02, 0.0)
-    waypoints = entry_waypoints(
-        robot,
-        TAG,
-        entry_distance=1.0,
-        lateral_offset=0.0,
-        yaw_offset=0.0,
-        keepout_radius=0.35,
-        arc_step_angle=0.5,
-    )
+    left = entry_steering(0.05, 0.0, 1.2, 0.4, 0.35)
+    right = entry_steering(-0.05, 0.0, 1.2, 0.4, 0.35)
 
-    assert len(waypoints) > 1
-    legs = [robot] + list(waypoints)
-    for start, end in zip(legs, legs[1:]):
-        clearance = segment_point_distance(
-            start.x, start.y, end.x, end.y, TAG.x, TAG.y
-        )
-        assert clearance >= 0.35 - 1e-6, f'leg clears only {clearance:.3f} m'
-    assert waypoints[-1].x == pytest.approx(1.0)
-    assert waypoints[-1].y == pytest.approx(0.0, abs=1e-9)
+    assert left == pytest.approx(-right)
+    assert left > 0.0
 
 
-def test_orbit_legs_respect_the_arc_step():
-    waypoints = entry_waypoints(
-        Pose2D(-1.0, 0.02, 0.0),
-        TAG,
-        entry_distance=1.0,
-        lateral_offset=0.0,
-        yaw_offset=0.0,
-        keepout_radius=0.35,
-        arc_step_angle=0.4,
-    )
+def test_entry_steering_never_saturates_from_a_zero_speed_term():
+    """Unlike atan2(k*cross, speed), this law has no speed denominator, so a
+    large cross-track error at any heading stays a bounded, finite command
+    rather than the stationary-spin saturation the old entry legs could hit."""
 
-    bearings = [math.atan2(point.y, point.x) for point in waypoints]
-    for previous, current in zip(bearings, bearings[1:]):
-        assert abs(normalize_angle(current - previous)) <= 0.4 + 1e-6
+    angular = entry_steering(cross=10.0, yaw=1.5, cross_track_gain=1.2, yaw_gain=0.4, max_angular_speed=0.35)
+
+    assert math.isfinite(angular)
+    assert abs(angular) <= 0.35 + 1e-9
 
 
 def scan(bearings_to_ranges, forward_angle=0.0):

@@ -84,17 +84,20 @@ def test_reverse_reaches_the_docked_pose():
     assert update.angular == pytest.approx(0.0)
 
 
-def test_reverse_ninety_degree_start_enters_the_corridor_nose_first():
-    """Entry legs always drive forward so the tag stays in frame as long as
-    possible; only the last stretch is blind."""
+def test_reverse_ninety_degree_start_backs_clear_of_the_corridor_first():
+    """Entry legs always drive forward once curving in, so the tag stays in
+    frame as long as possible; only the last stretch is blind. This start is
+    level with the tag but off axis, past the corridor mouth in along-axis
+    terms, so recovery starts with the same wall-safe backout used forward
+    (along/cross do not depend on ``reverse``, only the final run does)."""
 
     controller = reverse_controller()
 
     update = controller.update(Pose2D(0.0, -1.5, math.pi / 2.0), tag_fresh=True)
 
-    assert update.state == ApproachState.ENTER_TURN
+    assert update.state == ApproachState.RETREAT
     assert not update.overshot
-    assert update.waypoint.x == pytest.approx(ENTRY_DISTANCE, abs=1e-6)
+    assert update.linear < 0.0
 
 
 def test_reverse_entry_distance_bounds_the_blind_leg():

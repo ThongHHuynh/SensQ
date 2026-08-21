@@ -1139,7 +1139,8 @@ omega = yaw_kp * yaw + atan2(cross_track_kp * cross, speed + 0.05)</code></pre>
           <tr><td><span class="mono">min_linear_speed</span></td><td class="num">0.03</td><td>It stalls on carpet before reaching the goal</td></tr>
           <tr><td><span class="mono">min_angular_speed</span></td><td class="num">0.10</td><td>In-place turns stall against static friction</td></tr>
           <tr><td><span class="mono">approach_taper_distance</span></td><td class="num">0.25</td><td>It arrives too hot, or crawls the last stretch</td></tr>
-          <tr><td><span class="mono">dock_keepout_radius</span></td><td class="num">0.35</td><td>Entry legs pass closer to the dock than you want</td></tr>
+          <tr><td><span class="mono">entry_linear_speed</span></td><td class="num">0.03</td><td>The curve into the corridor is too slow or too aggressive</td></tr>
+          <tr><td><span class="mono">dock_keepout_radius</span></td><td class="num">0.35</td><td>The robot curves in too close to the tag before backing away</td></tr>
           <tr><td><span class="mono">anchor_samples</span></td><td class="num">5</td><td>The axis wanders between attempts &mdash; raise it</td></tr>
           <tr><td><span class="mono">anchor_filter_alpha</span></td><td class="num">0.35</td><td>Lower to smooth a noisy detector; raise to track a moving estimate</td></tr>
           <tr><td><span class="mono">rotation_stop_distance</span></td><td class="num">0.22</td><td>Should track the circumscribed footprint radius plus margin</td></tr>

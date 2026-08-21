@@ -52,7 +52,7 @@ docking_server:
 
     # Controller gains
     distance_kp: 0.40
-    heading_kp: 0.80   # bearing hold while driving an entry leg
+    heading_kp: 0.80   # bearing hold during retry-recovery rotation
     cross_track_kp: 1.20  # perpendicular deviation from the approach axis
     yaw_kp: 0.40
 
@@ -62,14 +62,21 @@ docking_server:
     corridor_half_width: 0.12   # inside this, no repositioning is needed
     entry_margin: 0.05          # slack behind the docked pose before re-entry
     entry_yaw_tolerance: 0.25
-    entry_position_tolerance: 0.06
     align_yaw_tolerance: 0.05   # must be tighter than yaw_tolerance
     overshoot_margin: 0.08      # must exceed distance_tolerance
     approach_taper_distance: 0.25
-    enter_drive_abort_angle: 0.60  # re-aim rather than arc onto a waypoint
     run_abort_yaw: 0.50
-    dock_keepout_radius: 0.35   # entry legs orbit rather than cross this
-    entry_arc_step: 0.50        # radians per arc leg when orbiting
+    # Constant forward speed held while curving onto the corridor axis.
+    # Deliberately decoupled from along-axis distance so the curve can't
+    # stall into a stationary spin the way the old entry legs could.
+    entry_linear_speed: 0.03
+    # How close to the tag is too close to still be curving in off-axis --
+    # inside this, back away from the dock before trying again rather than
+    # risk sweeping across it. Walls/shelving near the dock only constrain
+    # movement for some distance out from the tag, not the whole approach,
+    # so this is judged by distance to the tag rather than along-axis
+    # position.
+    dock_keepout_radius: 0.35
     max_corridor_replans: 3
 
     # Tag anchoring. One detection carries enough angular noise to tilt the

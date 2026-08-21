@@ -173,7 +173,7 @@ controller_server:
       critics: [RotateToGoal, Oscillation, BaseObstacle, GoalAlign, PathAlign, PathDist, GoalDist]
       BaseObstacle.scale: 0.01
 
-      PathAlign.scale: 24.0
+      PathAlign.scale: 42.0
       PathAlign.forward_point_distance: 0.15
       PathDist.scale: 32.0
 
@@ -361,10 +361,10 @@ velocity_smoother:
     scale_velocities: false
     feedback: OPEN_LOOP
 
-    max_velocity: [0.7, 0.0, 1.0]
-    min_velocity: [-0.25, 0.0, -1.0]
+    max_velocity: [0.3, 0.0, 1.0]
+    min_velocity: [-0.3, 0.0, -1.0]
 
-    max_accel: [0.3, 0.0, 1.2]
+    max_accel: [2.0, 0.0, 4.0]
     max_decel: [-0.8, 0.0, -1.5]
     odom_topic: /odometry/filtered
     odom_duration: 0.1

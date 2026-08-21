@@ -148,10 +148,6 @@ Visualization Manager:
           Value: true
         right_wheel_link:
           Value: true
-        tag_0:
-          Value: true
-        tag_1:
-          Value: true
       Marker Scale: 0.699999988079071
       Name: TF
       Show Arrows: true
@@ -164,10 +160,7 @@ Visualization Manager:
               base_link:
                 camera_link:
                   camera_optical_frame:
-                    tag_0:
-                      {}
-                    tag_1:
-                      {}
+                    {}
                 caster_wheel_link:
                   {}
                 imu_link:
@@ -294,18 +287,7 @@ Visualization Manager:
       Enabled: true
       Name: Docking Stages
       Namespaces:
-        actual/final_approach: true
-        actual/navigation: true
-        actual/predock_alignment: true
-        actual/staging_approach: true
-        current: true
-        live: true
-        reference/final: true
-        reference/labels: true
-        reference/poses: true
-        reference/staging: true
-        reference/tag: true
-        status: true
+        {}
       Topic:
         Depth: 1
         Durability Policy: Transient Local
@@ -419,7 +401,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Best Effort
-        Value: /camera/color/image_raw
+        Value: /camera/image_raw
       Value: true
   Enabled: true
   Global Options:
@@ -467,7 +449,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.4602456092834473
+      Distance: 6.829912185668945
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -485,7 +467,7 @@ Visualization Manager:
       Pitch: 1.265397548675537
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.083580732345581
+      Yaw: 3.078580617904663
     Saved: ~
 Window Geometry:
   Camera:
@@ -508,4 +490,4 @@ Window Geometry:
     collapsed: true
   Width: 1200
   X: 119
-  Y: 240
+  Y: 27

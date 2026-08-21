@@ -17,7 +17,7 @@ docks:
     reference_pose: [-0.185, -0.188, 1.577]
     staging_pose: [0.131, -0.196, -3.129]
     predocking_distance: 0.816101
-    final_distance: 0.2
+    final_distance: 0.3
     lateral_offset: 0.0
     yaw_offset: 0.0
     reverse_docking: false

@@ -163,7 +163,7 @@ controller_server:
       vx_samples: 20
       vy_samples: 1
       vtheta_samples: 40
-      sim_time: 1.7
+      sim_time: 1.0
       linear_granularity: 0.025
       angular_granularity: 0.025
       transform_tolerance: 0.2
@@ -173,11 +173,11 @@ controller_server:
       critics: [RotateToGoal, Oscillation, BaseObstacle, GoalAlign, PathAlign, PathDist, GoalDist]
       BaseObstacle.scale: 0.01
 
-      PathAlign.scale: 42.0
-      PathAlign.forward_point_distance: 0.15
+      PathAlign.scale: 64.0
+      PathAlign.forward_point_distance: 0.10
       PathDist.scale: 32.0
 
-      GoalAlign.scale: 20.0
+      GoalAlign.scale: 24.0
       GoalAlign.forward_point_distance: 0.10
       GoalDist.scale: 24.0
 

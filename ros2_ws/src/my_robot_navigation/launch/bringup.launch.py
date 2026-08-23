@@ -25,6 +25,7 @@ def generate_launch_description():
     enable_mission = LaunchConfiguration("enable_mission")
     start_camera = LaunchConfiguration("start_camera")
     camera_sensor_id = LaunchConfiguration("camera_sensor_id")
+    camera_flip_180 = LaunchConfiguration("camera_flip_180")
     camera_width = LaunchConfiguration("camera_width")
     camera_height = LaunchConfiguration("camera_height")
     camera_fps = LaunchConfiguration("camera_fps")
@@ -163,6 +164,7 @@ def generate_launch_description():
                 "camera_info_topic": camera_info_topic,
                 "camera_info_url": camera_info_url,
                 "frame_id": camera_frame_id,
+                "flip_180": ParameterValue(camera_flip_180, value_type=bool),
             }
         ],
         condition=IfCondition(start_camera),
@@ -285,6 +287,11 @@ def generate_launch_description():
                 "camera_sensor_id",
                 default_value="0",
                 description="nvarguscamerasrc sensor ID.",
+            ),
+            DeclareLaunchArgument(
+                "camera_flip_180",
+                default_value="True",
+                description="Rotate the published image 180 deg to correct for the flipped mounting bracket.",
             ),
             DeclareLaunchArgument(
                 "camera_width",

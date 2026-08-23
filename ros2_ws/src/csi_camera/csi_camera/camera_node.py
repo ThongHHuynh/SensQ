@@ -117,6 +117,8 @@ class JetsonCsiCamera(Node):
         self.declare_parameter("camera_info_topic", "/camera/camera_info")
         self.declare_parameter("camera_info_url", "")
         self.declare_parameter("frame_id", "camera_optical_frame")
+        self.declare_parameter("flip_180", True)
+
 
         sensor_id = int(self.get_parameter("sensor_id").value)
         width = int(self.get_parameter("width").value)
@@ -127,11 +129,13 @@ class JetsonCsiCamera(Node):
             self.get_parameter("camera_info_topic").value
         )
         camera_info_url = str(self.get_parameter("camera_info_url").value)
+        flip_180 = bool(self.get_parameter("flip_180").value)
 
         self.frame_id = str(self.get_parameter("frame_id").value)
         self.expected_width = width
         self.expected_height = height
         self.bridge = CvBridge()
+
 
         if camera_info_url:
             self.camera_info = load_camera_info(
@@ -165,6 +169,7 @@ class JetsonCsiCamera(Node):
             width=width,
             height=height,
             fps=fps,
+            flip_180=flip_180
         )
 
         self.capture = cv2.VideoCapture(
@@ -193,13 +198,15 @@ class JetsonCsiCamera(Node):
         width: int,
         height: int,
         fps: int,
+        flip_180: bool,
     ) -> str:
+        flip_method = 2 if flip_180 else 0
         return (
             f"nvarguscamerasrc sensor-id={sensor_id} ! "
             f"video/x-raw(memory:NVMM), "
             f"width={width}, height={height}, "
             f"framerate={fps}/1, format=NV12 ! "
-            "nvvidconv ! "
+            f"nvvidconv flip-method={flip_method} ! "
             "video/x-raw, format=BGRx ! "
             "videoconvert ! "
             "video/x-raw, format=BGR ! "

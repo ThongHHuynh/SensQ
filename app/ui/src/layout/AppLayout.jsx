@@ -1,4 +1,5 @@
-function AppLayout({ tabs, activeTab, onTabChange, children }) {
+function AppLayout({ tabs, activeTab, onTabChange, children, dataSource }) {
+  const isConnected = dataSource === "backend";
   return (
     <div className="min-h-screen bg-[#eef1f6] text-console-ink">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-white/10 bg-console-rail px-4 py-5 text-white md:flex md:flex-col">
@@ -28,7 +29,7 @@ function AppLayout({ tabs, activeTab, onTabChange, children }) {
         </nav>
         <div className="mt-auto rounded-md border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
           <div className="font-medium text-white">ROS bridge</div>
-          <div className="mt-1">Mocked data source</div>
+          <div className="mt-1">{isConnected ? "Connected to backend" : "Mock data"}</div>
         </div>
       </aside>
 

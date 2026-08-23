@@ -22,6 +22,7 @@ def generate_launch_description():
     nav2_params_file = LaunchConfiguration("nav2_params_file")
 
     use_rviz = LaunchConfiguration("use_rviz")
+    enable_mission = LaunchConfiguration("enable_mission")
     start_camera = LaunchConfiguration("start_camera")
     camera_sensor_id = LaunchConfiguration("camera_sensor_id")
     camera_width = LaunchConfiguration("camera_width")
@@ -37,6 +38,7 @@ def generate_launch_description():
     robot_bringup_path = get_package_share_path("my_robot_bringup")
     robot_navigation_path = get_package_share_path("my_robot_navigation")
     robot_docking_path = get_package_share_path("my_robot_docking")
+    robot_mission_path = get_package_share_path("my_robot_mission")
     real_dock_database = os.path.join(
             robot_docking_path,
             'config',
@@ -217,6 +219,17 @@ def generate_launch_description():
         }.items(),
     )
 
+    mission = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(robot_mission_path, "launch", "mission.launch.py")
+        ),
+        condition=IfCondition(enable_mission),
+        launch_arguments={
+            "use_sim_time": "false",
+            "dock_database_file": real_dock_database,
+        }.items(),
+    )
+
     rviz2_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -313,6 +326,11 @@ def generate_launch_description():
                 default_value=default_rviz_config_path,
                 description="RViz config path.",
             ),
+            DeclareLaunchArgument(
+                "enable_mission",
+                default_value="False",
+                description="Start the mission sequencer action server.",
+            ),
             robot_state_publisher_node,
             controller_node,
             delayed_joint_state_broadcaster,
@@ -322,6 +340,7 @@ def generate_launch_description():
             imu_launch,
             camera_node,
             docking,
+            mission,
             rviz2_node,
         ]
     )

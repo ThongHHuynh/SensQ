@@ -1,6 +1,8 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 
+from .config import CAMERA_TOPIC
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -57,7 +59,32 @@ def initial_snapshot() -> dict:
             "result": None,
             "updatedAt": None,
         },
+        "mission": {
+            "active": False,
+            "phase": "IDLE",
+            "missionType": None,
+            "dockId": None,
+            "currentZone": None,
+            "progressPercent": 0.0,
+            "detail": "",
+            "elapsedSeconds": 0,
+            "result": None,
+            "updatedAt": None,
+        },
+        "undocking": {
+            "active": False,
+            "state": "IDLE",
+            "distanceCleared": None,
+            "result": None,
+            "updatedAt": None,
+        },
         "tagDetections": [],
+        "camera": {
+            "available": False,
+            "topic": CAMERA_TOPIC,
+            "width": None,
+            "height": None,
+        },
         "coverage": {
             "plannerReady": False,
             "state": "IDLE",
@@ -83,6 +110,7 @@ def initial_snapshot() -> dict:
             {"name": "IMU", "topic": "/imu", "status": "offline", "detail": "Waiting for IMU"},
             {"name": "ros2_control", "topic": "/controller_manager", "status": "offline", "detail": "Controllers not confirmed"},
             {"name": "SLAM", "topic": "/map", "status": "offline", "detail": "Waiting for map"},
+            {"name": "Camera", "topic": CAMERA_TOPIC, "status": "offline", "detail": "Waiting for camera frames"},
             {"name": "Web teleop", "topic": "/cmd_vel", "status": "offline", "detail": "Waiting for ROS publisher"},
         ],
         "maps": [

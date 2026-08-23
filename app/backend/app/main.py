@@ -1,13 +1,22 @@
 import asyncio
 import math
+import os
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from .database import init_db, save_event, save_snapshot
+from .database import (
+    get_all_settings,
+    init_db,
+    list_mission_records,
+    save_event,
+    save_snapshot,
+    upsert_settings,
+)
 from .coverage_manager import coverage_manager
-from .config import USE_SIM_TIME
+from .config import DEFAULT_SETTINGS, USE_SIM_TIME
 from .docking import DockingConfigError, docking_catalog
 from .launch_manager import launch_manager
 from .mapping_manager import mapping_manager
@@ -43,6 +52,16 @@ class DockGoalRequest(BaseModel):
     final_distance: float | None = None
     lateral_offset: float | None = None
     yaw_offset: float | None = None
+
+
+class UndockRequest(BaseModel):
+    dock_id: str = Field(..., min_length=1, max_length=120)
+
+
+class MissionStartRequest(BaseModel):
+    mission_type: str = Field(..., min_length=1, max_length=32)
+    dock_id: str = Field(..., min_length=1, max_length=120)
+    auto_dock_on_complete: bool = True
 
 
 class PoseRequest(BaseModel):
@@ -85,6 +104,9 @@ async def startup() -> None:
     global ros_monitor
     await init_db()
     await save_event("backend", "Backend started")
+    persisted_settings = await get_all_settings()
+    if "ros_domain_id" in persisted_settings:
+        os.environ["ROS_DOMAIN_ID"] = str(persisted_settings["ros_domain_id"])
     await mapping_manager.load_saved_maps_into_state()
     loop = asyncio.get_running_loop()
     server_config = docking_catalog.get_payload()["serverConfig"]
@@ -152,6 +174,64 @@ async def teleop_cmd_vel(command: CmdVelRequest) -> dict:
     }
 
 
+CAMERA_STREAM_INTERVAL_SECONDS = 1 / 15
+
+
+@app.get("/api/camera/stream")
+async def camera_stream() -> StreamingResponse:
+    if ros_monitor is None:
+        raise HTTPException(status_code=503, detail="ROS monitor is not initialized")
+
+    async def frame_generator():
+        boundary = b"--frame"
+        while True:
+            frame = ros_monitor.get_camera_frame()
+            if frame is not None:
+                yield (
+                    boundary + b"\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame)).encode("ascii") + b"\r\n\r\n" + frame + b"\r\n"
+                )
+            await asyncio.sleep(CAMERA_STREAM_INTERVAL_SECONDS)
+
+    return StreamingResponse(
+        frame_generator(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.get("/api/camera/snapshot")
+async def camera_snapshot() -> Response:
+    if ros_monitor is None:
+        raise HTTPException(status_code=503, detail="ROS monitor is not initialized")
+    frame = ros_monitor.get_camera_frame()
+    if frame is None:
+        raise HTTPException(status_code=404, detail="No camera frame is available yet")
+    return Response(content=frame, media_type="image/jpeg")
+
+
+@app.get("/api/settings")
+async def get_settings() -> dict:
+    persisted = await get_all_settings()
+    merged = dict(DEFAULT_SETTINGS)
+    merged.update(persisted)
+    return merged
+
+
+@app.put("/api/settings")
+async def put_settings(payload: dict) -> dict:
+    unknown = set(payload.keys()) - set(DEFAULT_SETTINGS.keys())
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown settings keys: {', '.join(sorted(unknown))}")
+    persisted = await upsert_settings(payload)
+    if "ros_domain_id" in payload:
+        os.environ["ROS_DOMAIN_ID"] = str(payload["ros_domain_id"])
+    await save_event("settings", f"Updated settings: {', '.join(sorted(payload.keys()))}")
+    merged = dict(DEFAULT_SETTINGS)
+    merged.update(persisted)
+    return merged
+
+
 @app.get("/api/docking/config")
 async def docking_config() -> dict:
     return docking_catalog.get_payload()
@@ -182,6 +262,73 @@ async def cancel_docking() -> dict:
         raise HTTPException(status_code=409, detail=message)
     await save_event("docking", message)
     return {"ok": True, "message": message, "docking": robot_state.get_snapshot()["docking"]}
+
+
+@app.post("/api/docking/undock")
+async def undock(request: UndockRequest) -> dict:
+    if ros_monitor is None:
+        raise HTTPException(status_code=503, detail="ROS monitor is not initialized")
+    started, message = ros_monitor.send_undock_goal(request.dock_id)
+    if not started:
+        raise HTTPException(status_code=409, detail=message)
+    await save_event("undocking", message)
+    return {"ok": True, "message": message, "undocking": robot_state.get_snapshot()["undocking"]}
+
+
+@app.post("/api/docking/undock/cancel")
+async def cancel_undock() -> dict:
+    if ros_monitor is None:
+        raise HTTPException(status_code=503, detail="ROS monitor is not initialized")
+    cancelled, message = ros_monitor.cancel_undock()
+    if not cancelled:
+        raise HTTPException(status_code=409, detail=message)
+    await save_event("undocking", message)
+    return {"ok": True, "message": message, "undocking": robot_state.get_snapshot()["undocking"]}
+
+
+@app.post("/api/mission/start")
+async def start_mission(request: MissionStartRequest) -> dict:
+    if ros_monitor is None:
+        raise HTTPException(status_code=503, detail="ROS monitor is not initialized")
+    started, message = ros_monitor.start_mission(
+        request.mission_type, request.dock_id, request.auto_dock_on_complete
+    )
+    if not started:
+        raise HTTPException(status_code=409, detail=message)
+    await save_event("mission", message)
+    return {"ok": True, "message": message, "mission": robot_state.get_snapshot()["mission"]}
+
+
+@app.post("/api/mission/cancel")
+async def cancel_mission() -> dict:
+    if ros_monitor is None:
+        raise HTTPException(status_code=503, detail="ROS monitor is not initialized")
+    cancelled, message = ros_monitor.cancel_mission()
+    if not cancelled:
+        raise HTTPException(status_code=409, detail=message)
+    await save_event("mission", message)
+    return {"ok": True, "message": message, "mission": robot_state.get_snapshot()["mission"]}
+
+
+@app.get("/api/mission/history")
+async def mission_history() -> dict:
+    records = await list_mission_records()
+    return {
+        "missions": [
+            {
+                "id": record.id,
+                "missionType": record.mission_type,
+                "dockId": record.dock_id,
+                "startedAt": record.started_at.isoformat() if record.started_at else None,
+                "completedAt": record.completed_at.isoformat() if record.completed_at else None,
+                "success": record.success,
+                "areaCoveredM2": record.area_covered_m2,
+                "durationSeconds": record.duration_seconds,
+                "message": record.message,
+            }
+            for record in records
+        ]
+    }
 
 
 @app.post("/api/docking/stations")

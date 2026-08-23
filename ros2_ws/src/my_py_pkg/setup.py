@@ -15,8 +15,8 @@ setup(
     zip_safe=True,
     maintainer='tom',
     maintainer_email='thonghuynh.0203@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Miscellaneous ROS 2 Python practice nodes (publishers, subscribers, and services) used during SensQ development',
+    license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [

@@ -4,7 +4,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         Node(
-            package='my_robot_bringup',
+            package='csi_camera',
             executable='camera_node',
             name='camera_node',
             output='screen',

@@ -26,6 +26,7 @@ DATABASE_URL = os.getenv(
 )
 SERIAL_PORT = os.getenv("SENSQ_SERIAL_PORT", "/dev/ttyACM0")
 ODOM_TOPIC = os.getenv("SENSQ_ODOM_TOPIC", "/diff_drive_controller/odom")
+CAMERA_TOPIC = os.getenv("SENSQ_CAMERA_TOPIC", "/camera/image_raw")
 JOINT_STATES_TOPIC = os.getenv("SENSQ_JOINT_STATES_TOPIC", "/joint_states")
 CMD_VEL_TOPIC = os.getenv("SENSQ_CMD_VEL_TOPIC", "/cmd_vel")
 INITIAL_POSE_TOPIC = os.getenv("SENSQ_INITIAL_POSE_TOPIC", "/initialpose")
@@ -54,6 +55,8 @@ COVERAGE_EXECUTION_STATUS_TOPIC = os.getenv(
 DOCK_RELOAD_SERVICE = os.getenv(
     "SENSQ_DOCK_RELOAD_SERVICE", "/docking_server/reload_database"
 )
+UNDOCK_ACTION_NAME = os.getenv("SENSQ_UNDOCK_ACTION", "/undock")
+MISSION_ACTION_NAME = os.getenv("SENSQ_MISSION_ACTION", "/execute_mission")
 USE_SIM_TIME = os.getenv("SENSQ_USE_SIM_TIME", "false").lower() in {
     "1",
     "true",
@@ -68,3 +71,10 @@ ROBOT_LAUNCH_FILE = os.getenv(
 )
 TELEOP_PACKAGE = os.getenv("SENSQ_TELEOP_PACKAGE", "teleop_twist_keyboard")
 TELEOP_EXECUTABLE = os.getenv("SENSQ_TELEOP_EXECUTABLE", "teleop_twist_keyboard")
+DEFAULT_SETTINGS = {
+    "backend_url": "http://localhost:8000",
+    "ros_domain_id": os.getenv("ROS_DOMAIN_ID", "0"),
+    "default_map": "",
+    "command_safety_mode": "confirm",
+    "use_sim_time": USE_SIM_TIME,
+}

@@ -1,6 +1,6 @@
 import { robotSnapshot } from "../data/mockRobot.js";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL ?? API_BASE_URL.replace(/^http/, "ws");
 
 export function getRobotSnapshot() {
@@ -119,6 +119,22 @@ export async function cancelDocking() {
     method: "POST"
   });
   return dockingResponse(response, `Docking cancellation failed: ${response.status}`);
+}
+
+export async function undockRobot(dockId) {
+  const response = await fetch(`${API_BASE_URL}/api/docking/undock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dock_id: dockId })
+  });
+  return dockingResponse(response, `Undock start failed: ${response.status}`);
+}
+
+export async function cancelUndock() {
+  const response = await fetch(`${API_BASE_URL}/api/docking/undock/cancel`, {
+    method: "POST"
+  });
+  return dockingResponse(response, `Undock cancellation failed: ${response.status}`);
 }
 
 export async function saveDockStation(station) {
@@ -247,6 +263,58 @@ export async function executeCoverage() {
 export async function cancelCoverage() {
   const response = await fetch(`${API_BASE_URL}/api/coverage/cancel`, { method: "POST" });
   return apiResponse(response, `Coverage cancellation failed: ${response.status}`);
+}
+
+export async function fetchCameraSnapshot() {
+  const response = await fetch(`${API_BASE_URL}/api/camera/snapshot`);
+  if (!response.ok) {
+    let detail = null;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || payload.message;
+    } catch {
+      detail = null;
+    }
+    throw new Error(detail || `Snapshot request failed: ${response.status}`);
+  }
+  return response.blob();
+}
+
+export async function fetchSettings() {
+  const response = await fetch(`${API_BASE_URL}/api/settings`);
+  return apiResponse(response, `Settings request failed: ${response.status}`);
+}
+
+export async function updateSettings(values) {
+  const response = await fetch(`${API_BASE_URL}/api/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(values)
+  });
+  return apiResponse(response, `Settings update failed: ${response.status}`);
+}
+
+export async function startMission(missionType, dockId, autoDock) {
+  const response = await fetch(`${API_BASE_URL}/api/mission/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mission_type: missionType,
+      dock_id: dockId,
+      auto_dock_on_complete: autoDock
+    })
+  });
+  return apiResponse(response, `Mission start failed: ${response.status}`);
+}
+
+export async function cancelMission() {
+  const response = await fetch(`${API_BASE_URL}/api/mission/cancel`, { method: "POST" });
+  return apiResponse(response, `Mission cancellation failed: ${response.status}`);
+}
+
+export async function getMissionHistory() {
+  const response = await fetch(`${API_BASE_URL}/api/mission/history`);
+  return apiResponse(response, `Mission history request failed: ${response.status}`);
 }
 
 export function createRobotStateSocket() {

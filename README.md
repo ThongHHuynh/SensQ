@@ -230,9 +230,9 @@ Coverage path:
 
 ```bash
 cd /home/tom/SensQ/ros2_ws
-colcon build --packages-select coverage_planner
+colcon build --packages-select test_coverage
 source install/setup.bash
-ros2 launch coverage_planner coverage.launch.py
+ros2 launch test_coverage coverage.launch.py
 ```
 
 Add `/coverage_path` as `Path` and `/coverage_points` as `MarkerArray` in RViz.
@@ -241,7 +241,7 @@ Coverage debug maps/paths use timestamp `0` to avoid stale TF drops in RViz.
 After checking the path, drive it with:
 
 ```bash
-ros2 launch coverage_planner coverage.launch.py execute_coverage:=true
+ros2 launch test_coverage coverage.launch.py execute_coverage:=true
 ```
 
 Fields2Cover coverage path:

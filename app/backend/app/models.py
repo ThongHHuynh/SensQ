@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -24,6 +24,29 @@ class RobotSnapshot(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     payload: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    value: Mapped[object] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MissionRecord(Base):
+    __tablename__ = "mission_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_type: Mapped[str] = mapped_column(String(32))
+    dock_id: Mapped[str] = mapped_column(String(120))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    success: Mapped[bool] = mapped_column(Boolean, default=False)
+    area_covered_m2: Mapped[float] = mapped_column(Float, default=0.0)
+    duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
+    message: Mapped[str] = mapped_column(Text, default="")
 
 
 class SavedMap(Base):

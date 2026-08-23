@@ -3,7 +3,7 @@
   <name>test_coverage</name>
   <version>0.1.0</version>
   <description>Modular Boustrophedon coverage planning and Nav2 execution.</description>
-  <maintainer email="tom@todo.todo">tom</maintainer>
+  <maintainer email="thonghuynh.0203@gmail.com">tom</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

@@ -17,10 +17,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader.jsx";
 import {
   cancelDocking,
+  cancelUndock,
   fetchDockingConfig,
   saveDockStation,
   sendTeleopCommand,
-  startDocking
+  startDocking,
+  undockRobot
 } from "../services/robotApi.js";
 
 function DockingPage({ robot }) {
@@ -79,6 +81,7 @@ function DockingPage({ robot }) {
 
 function DockMode({ robot, catalog, message: catalogMessage }) {
   const docking = robot.docking ?? {};
+  const undocking = robot.undocking ?? {};
   const [selectedDockId, setSelectedDockId] = useState("");
   const [navigateToStaging, setNavigateToStaging] = useState(true);
   const [useOffsetOverride, setUseOffsetOverride] = useState(false);
@@ -87,8 +90,12 @@ function DockMode({ robot, catalog, message: catalogMessage }) {
   const [yawOffset, setYawOffset] = useState(0);
   const [message, setMessage] = useState(catalogMessage);
   const [pending, setPending] = useState(false);
+  const [undockPending, setUndockPending] = useState(false);
+  const [undockMessage, setUndockMessage] = useState(null);
   const selectedDock = catalog.docks.find((dock) => dock.dockId === selectedDockId);
   const active = Boolean(docking.active);
+  const undockActive = Boolean(undocking.active);
+  const dockedOrIdle = !active && ["IDLE", "SUCCEEDED"].includes(docking.state ?? "IDLE");
   const minimumDistance = Number(catalog.serverConfig.minimum_tag_distance ?? 0);
 
   useEffect(() => {
@@ -133,6 +140,31 @@ function DockMode({ robot, catalog, message: catalogMessage }) {
       setMessage(error.message);
     } finally {
       setPending(false);
+    }
+  }
+
+  async function handleUndock() {
+    if (!selectedDockId) return;
+    setUndockPending(true);
+    try {
+      const response = await undockRobot(selectedDockId);
+      setUndockMessage(response.message);
+    } catch (error) {
+      setUndockMessage(error.message);
+    } finally {
+      setUndockPending(false);
+    }
+  }
+
+  async function handleUndockCancel() {
+    setUndockPending(true);
+    try {
+      const response = await cancelUndock();
+      setUndockMessage(response.message);
+    } catch (error) {
+      setUndockMessage(error.message);
+    } finally {
+      setUndockPending(false);
     }
   }
 
@@ -197,19 +229,42 @@ function DockMode({ robot, catalog, message: catalogMessage }) {
           <button type="button" onClick={handleCancel} disabled={!active || pending} className="danger-button">
             <Ban className="h-4 w-4" /> Cancel
           </button>
+          <button
+            type="button"
+            onClick={handleUndock}
+            disabled={!selectedDockId || !dockedOrIdle || undockActive || undockPending}
+            className="secondary-button"
+          >
+            <ArrowUp className="h-4 w-4" /> {undockPending && !undockActive ? "Undocking…" : "Undock"}
+          </button>
+          <button type="button" onClick={handleUndockCancel} disabled={!undockActive || undockPending} className="danger-button">
+            <Ban className="h-4 w-4" /> Cancel undock
+          </button>
         </div>
+        <p className="mt-2 min-h-5 text-sm text-slate-600">{undocking.result?.message ?? undockMessage}</p>
       </form>
 
-      <section className="rounded-md border border-console-line bg-white p-5 shadow-soft" aria-live="polite">
-        <h2 className="text-lg font-semibold">Live approach</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <FeedbackCard label="State" value={docking.state ?? "IDLE"} icon={Navigation} />
-          <FeedbackCard label="Distance" value={formatMetric(docking.distanceRemaining, "m")} icon={Ruler} />
-          <FeedbackCard label="Lateral error" value={formatMetric(docking.lateralError, "m")} icon={MapPin} />
-          <FeedbackCard label="Yaw error" value={formatMetric(docking.yawError, "rad")} icon={RotateCw} />
-          <FeedbackCard label="Retries" value={String(docking.retryCount ?? 0)} icon={RotateCw} />
-          <FeedbackCard label="Result code" value={String(docking.result?.errorCode ?? "—")} icon={Anchor} />
-        </div>
+      <section className="space-y-4">
+        <section className="rounded-md border border-console-line bg-white p-5 shadow-soft" aria-live="polite">
+          <h2 className="text-lg font-semibold">Live approach</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <FeedbackCard label="State" value={docking.state ?? "IDLE"} icon={Navigation} />
+            <FeedbackCard label="Distance" value={formatMetric(docking.distanceRemaining, "m")} icon={Ruler} />
+            <FeedbackCard label="Lateral error" value={formatMetric(docking.lateralError, "m")} icon={MapPin} />
+            <FeedbackCard label="Yaw error" value={formatMetric(docking.yawError, "rad")} icon={RotateCw} />
+            <FeedbackCard label="Retries" value={String(docking.retryCount ?? 0)} icon={RotateCw} />
+            <FeedbackCard label="Result code" value={String(docking.result?.errorCode ?? "—")} icon={Anchor} />
+          </div>
+        </section>
+
+        <section className="rounded-md border border-console-line bg-white p-5 shadow-soft" aria-live="polite">
+          <h2 className="text-lg font-semibold">Undocking</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <FeedbackCard label="State" value={undocking.state ?? "IDLE"} icon={Navigation} />
+            <FeedbackCard label="Distance cleared" value={formatMetric(undocking.distanceCleared, "m")} icon={Ruler} />
+            <FeedbackCard label="Result code" value={String(undocking.result?.errorCode ?? "—")} icon={ArrowUp} />
+          </div>
+        </section>
       </section>
     </section>
   );

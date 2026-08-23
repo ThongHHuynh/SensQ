@@ -112,4 +112,17 @@ def generate_launch_description():
                 },
             ],
         ),
+        Node(
+            package='my_robot_docking',
+            executable='undock_server',
+            name='undock_server',
+            output='screen',
+            parameters=[
+                server_config,
+                {
+                    'use_sim_time': use_sim_time,
+                    'dock_database_file': database,
+                },
+            ],
+        ),
     ])

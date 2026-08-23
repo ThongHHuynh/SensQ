@@ -18,7 +18,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="tom",
-    maintainer_email="tom@todo.todo",
+    maintainer_email="thonghuynh.0203@gmail.com",
     description="Modular Boustrophedon coverage planning and Nav2 execution.",
     license="Apache-2.0",
     tests_require=["pytest"],

@@ -28,11 +28,14 @@ def generate_launch_description():
     gazebo_partition = f"my_robot_{os.getpid()}"
     headless = LaunchConfiguration('headless')
     use_rviz = LaunchConfiguration('use_rviz')
+    nav_map_path = LaunchConfiguration('map')
+    enable_mission = LaunchConfiguration('enable_mission')
 
     robot_description_path = get_package_share_path('my_robot_description')
     robot_bringup_path = get_package_share_path('my_robot_bringup')
     robot_navigation_path = get_package_share_path('my_robot_navigation')
     docking_path = get_package_share_path('my_robot_docking')
+    mission_path = get_package_share_path('my_robot_mission')
     simulation_dock_database = os.path.join(
         docking_path,
         'config',
@@ -50,7 +53,7 @@ def generate_launch_description():
 
     gazebo_config_path = os.path.join(robot_bringup_path, 'config', 'gazebo_bridge.yaml')
     world_path = os.path.join(robot_description_path, 'worlds', 'maze_apriltags.sdf')
-    nav_map_path = '/home/tom/maps/simple_maze.yaml'
+    default_nav_map_path = os.path.join(robot_navigation_path, 'maps', 'simple_maze.yaml')
 
     # Gazebo converts package:// mesh URIs to model:// URIs. Both the legacy
     # Ignition and current Gazebo variable must contain the parent directory
@@ -163,6 +166,17 @@ def generate_launch_description():
         }.items(),
     )
 
+    mission = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(mission_path, 'launch', 'mission.launch.py')
+        ),
+        condition=IfCondition(enable_mission),
+        launch_arguments={
+            'use_sim_time': 'true',
+            'dock_database_file': simulation_dock_database,
+        }.items(),
+    )
+
     ekf_node = Node(
         package='robot_localization',
         executable='ekf_node',
@@ -225,6 +239,20 @@ def generate_launch_description():
             description='Start RViz.',
         )
     )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'map',
+            default_value=default_nav_map_path,
+            description='Full path to the map yaml file to load in Nav2.',
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'enable_mission',
+            default_value='false',
+            description='Start the mission sequencer action server.',
+        )
+    )
     ld.add_action(robot_state_publisher_node)
     ld.add_action(rviz2_node)
     ld.add_action(gz_sim_gui)
@@ -232,6 +260,7 @@ def generate_launch_description():
     ld.add_action(delayed_spawn_entity)
     ld.add_action(ros_gz_bridge)
     ld.add_action(docking)
+    ld.add_action(mission)
     ld.add_action(delayed_ekf)
     ld.add_action(delayed_nav2)
 

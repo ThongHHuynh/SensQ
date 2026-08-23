@@ -7,6 +7,7 @@ from time import monotonic
 from typing import Callable
 
 from .config import (
+    CAMERA_TOPIC,
     CMD_VEL_TOPIC,
     COVERAGE_CANCEL_SERVICE,
     COVERAGE_EXECUTION_STATUS_TOPIC,
@@ -19,12 +20,21 @@ from .config import (
     JOINT_STATES_TOPIC,
     MAP_LOAD_SERVICE,
     MAP_TOPIC,
+    MISSION_ACTION_NAME,
     ODOM_TOPIC,
+    UNDOCK_ACTION_NAME,
     USE_SIM_TIME,
 )
-from .database import save_snapshot
+from .database import create_mission_record, save_snapshot
 from .state import robot_state, utc_now
 from .websocket_manager import ws_manager
+
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    cv2 = None
+    np = None
 
 
 def yaw_from_quaternion(z: float, w: float) -> float:
@@ -122,8 +132,10 @@ class RosMonitor:
         dock_action_name: str,
         tag_frames: dict[int, str] | None = None,
         tag_normal_sign: float = -1.0,
+        save_mission_record: Callable[[dict], None] | None = None,
     ) -> None:
         self._publish = publish
+        self._save_mission_record = save_mission_record
         self._thread: Thread | None = None
         self._lock = Lock()
         self._cmd_vel_publisher = None
@@ -138,6 +150,22 @@ class RosMonitor:
         self._dock_cancel_requested = False
         self._dock_feedback_states = {}
         self._dock_goal_statuses = {}
+        self._undock_action_name = UNDOCK_ACTION_NAME
+        self._undock_client = None
+        self._undock_type = None
+        self._undock_goal_handle = None
+        self._undock_goal_pending = False
+        self._undock_cancel_requested = False
+        self._undock_feedback_states = {}
+        self._mission_action_name = MISSION_ACTION_NAME
+        self._mission_client = None
+        self._mission_type = None
+        self._mission_goal_handle = None
+        self._mission_goal_pending = False
+        self._mission_cancel_requested = False
+        self._mission_feedback_states = {}
+        self._mission_start_time = None
+        self._mission_request = None
         self._node = None
         self._initial_pose_publisher = None
         self._initial_pose_type = None
@@ -157,6 +185,10 @@ class RosMonitor:
         self._tag_last_seen: dict[int, float] = {}
         self._latest_tags: dict[int, dict] = {}
         self._has_map_pose = False
+        self._camera_lock = Lock()
+        self._camera_frame: bytes | None = None
+        self._camera_last_frame_at = 0.0
+        self._camera_last_state_publish = 0.0
 
     def start(self) -> None:
         try:
@@ -164,7 +196,7 @@ class RosMonitor:
             from action_msgs.msg import GoalStatus
             from apriltag_msgs.msg import AprilTagDetectionArray
             from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
-            from my_robot_docking_msgs.action import Dock
+            from my_robot_docking_msgs.action import Dock, Mission, Undock
             from nav2_msgs.action import NavigateToPose
             from nav2_msgs.srv import LoadMap
             from nav_msgs.msg import Path
@@ -224,6 +256,35 @@ class RosMonitor:
                     self._status_message = f"Publishing {CMD_VEL_TOPIC}"
                     self._dock_client = dock_client
                     self._dock_type = Dock
+                    self._undock_client = ActionClient(
+                        node,
+                        Undock,
+                        self._undock_action_name,
+                    )
+                    self._undock_type = Undock
+                    self._undock_feedback_states = {
+                        Undock.Feedback.IDLE: "IDLE",
+                        Undock.Feedback.REVERSING: "REVERSING",
+                        Undock.Feedback.ROTATING: "ROTATING",
+                        Undock.Feedback.CLEARING: "CLEARING",
+                        Undock.Feedback.COMPLETE: "COMPLETE",
+                    }
+                    self._mission_client = ActionClient(
+                        node,
+                        Mission,
+                        self._mission_action_name,
+                    )
+                    self._mission_type = Mission
+                    self._mission_feedback_states = {
+                        Mission.Feedback.UNDOCKING: "UNDOCKING",
+                        Mission.Feedback.NAVIGATING: "NAVIGATING",
+                        Mission.Feedback.COVERING: "COVERING",
+                        Mission.Feedback.RETURNING: "RETURNING",
+                        Mission.Feedback.DOCKING: "DOCKING",
+                        Mission.Feedback.COMPLETE: "COMPLETE",
+                        Mission.Feedback.PAUSED: "PAUSED",
+                        Mission.Feedback.ERROR: "ERROR",
+                    }
                     self._navigate_client = ActionClient(
                         node,
                         NavigateToPose,
@@ -284,8 +345,9 @@ class RosMonitor:
                 Odometry = None
 
             try:
-                from sensor_msgs.msg import JointState, LaserScan, Imu
+                from sensor_msgs.msg import Image, JointState, LaserScan, Imu
             except ImportError:
+                Image = None
                 JointState = None
                 LaserScan = None
                 Imu = None
@@ -381,6 +443,39 @@ class RosMonitor:
             def imu_cb(_) -> None:
                 snapshot = robot_state.update_device("IMU", "online", "Receiving /imu")
                 self._publish(snapshot)
+
+            def camera_cb(msg) -> None:
+                if msg.encoding == "bgr8":
+                    frame = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
+                elif msg.encoding == "rgb8":
+                    frame = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
+                    frame = frame[:, :, ::-1]
+                elif msg.encoding == "mono8":
+                    frame = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width))
+                else:
+                    return
+                ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if not ok:
+                    return
+                with self._camera_lock:
+                    self._camera_frame = encoded.tobytes()
+                    self._camera_last_frame_at = monotonic()
+
+                now = monotonic()
+                if now - self._camera_last_state_publish > 1.0:
+                    self._camera_last_state_publish = now
+                    snapshot = robot_state.update(
+                        {
+                            "camera": {
+                                "available": True,
+                                "topic": CAMERA_TOPIC,
+                                "width": int(msg.width),
+                                "height": int(msg.height),
+                            }
+                        }
+                    )
+                    robot_state.update_device("Camera", "online", f"Receiving {CAMERA_TOPIC}", CAMERA_TOPIC)
+                    self._publish(snapshot)
 
             def map_cb(msg) -> None:
                 live_map = occupancy_grid_to_payload(msg)
@@ -547,6 +642,8 @@ class RosMonitor:
                 node.create_subscription(LaserScan, "/scan", scan_cb, 10)
             if Imu is not None:
                 node.create_subscription(Imu, "/imu", imu_cb, 10)
+            if Image is not None and cv2 is not None and np is not None:
+                node.create_subscription(Image, CAMERA_TOPIC, camera_cb, 1)
             if tf_buffer is not None:
                 node.create_timer(0.5, update_map_pose)
                 node.create_timer(0.2, update_tags)
@@ -610,6 +707,14 @@ class RosMonitor:
         with self._lock:
             observation = self._latest_tags.get(tag_id)
             return dict(observation) if observation is not None else None
+
+    def get_camera_frame(self) -> bytes | None:
+        with self._camera_lock:
+            if self._camera_frame is None:
+                return None
+            if monotonic() - self._camera_last_frame_at > 2.0:
+                return None
+            return self._camera_frame
 
     def set_initial_pose(self, x: float, y: float, yaw_degrees: float) -> tuple[bool, str]:
         with self._lock:
@@ -971,6 +1076,358 @@ class RosMonitor:
         snapshot = robot_state.update({"docking": patch})
         self._publish(snapshot)
 
+    def send_undock_goal(self, dock_id: str) -> tuple[bool, str]:
+        with self._lock:
+            client = self._undock_client
+            undock_type = self._undock_type
+            active = self._undock_goal_pending or self._undock_goal_handle is not None
+
+        if active:
+            return False, "An undocking goal is already active"
+        if not self._ros_available or client is None or undock_type is None:
+            return False, "ROS undocking client is not initialized"
+        if not client.server_is_ready():
+            return False, f"Undock action {self._undock_action_name} is unavailable"
+
+        goal = undock_type.Goal()
+        goal.dock_id = dock_id
+
+        with self._lock:
+            self._undock_goal_pending = True
+            self._undock_cancel_requested = False
+
+        self._publish_undocking(
+            {
+                "active": True,
+                "state": "SENDING",
+                "distanceCleared": None,
+                "result": None,
+            }
+        )
+        try:
+            future = client.send_goal_async(
+                goal,
+                feedback_callback=self._undocking_feedback,
+            )
+            future.add_done_callback(self._undocking_goal_response)
+        except Exception as error:
+            self._fail_undocking(f"Could not send undocking goal: {error}")
+            return False, str(error)
+        return True, f"Undocking goal sent for {dock_id}"
+
+    def cancel_undock(self) -> tuple[bool, str]:
+        with self._lock:
+            pending = self._undock_goal_pending
+            goal_handle = self._undock_goal_handle
+            if pending:
+                self._undock_cancel_requested = True
+
+        if pending and goal_handle is None:
+            self._publish_undocking({"state": "CANCELING"})
+            return True, "Undocking cancellation queued"
+        if goal_handle is None:
+            return False, "There is no active undocking goal"
+
+        self._publish_undocking({"state": "CANCELING"})
+        try:
+            goal_handle.cancel_goal_async()
+        except Exception as error:
+            self._fail_undocking(f"Could not cancel undocking: {error}")
+            return False, str(error)
+        return True, "Undocking cancellation requested"
+
+    def _undocking_goal_response(self, future) -> None:
+        try:
+            goal_handle = future.result()
+        except Exception as error:
+            self._fail_undocking(f"Undocking goal request failed: {error}")
+            return
+
+        if goal_handle is None or not goal_handle.accepted:
+            self._fail_undocking("Undocking goal was rejected", state="REJECTED")
+            return
+
+        with self._lock:
+            self._undock_goal_pending = False
+            self._undock_goal_handle = goal_handle
+            cancel_requested = self._undock_cancel_requested
+
+        self._publish_undocking({"active": True, "state": "ACCEPTED"})
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self._undocking_result)
+        if cancel_requested:
+            goal_handle.cancel_goal_async()
+            self._publish_undocking({"state": "CANCELING"})
+
+    def _undocking_feedback(self, message) -> None:
+        feedback = message.feedback
+        state = self._undock_feedback_states.get(
+            feedback.state,
+            f"STATE_{feedback.state}",
+        )
+        self._publish_undocking(
+            {
+                "active": True,
+                "state": state,
+                "distanceCleared": round(float(feedback.distance_cleared), 4),
+            }
+        )
+
+    def _undocking_result(self, future) -> None:
+        try:
+            wrapped_result = future.result()
+            result = wrapped_result.result
+            goal_status = self._dock_goal_statuses.get(
+                wrapped_result.status,
+                f"STATUS_{wrapped_result.status}",
+            )
+        except Exception as error:
+            self._fail_undocking(f"Undocking result failed: {error}")
+            return
+
+        with self._lock:
+            self._undock_goal_handle = None
+            self._undock_goal_pending = False
+            self._undock_cancel_requested = False
+
+        success = bool(result.success)
+        self._publish_undocking(
+            {
+                "active": False,
+                "state": "SUCCEEDED" if success else goal_status,
+                "result": {
+                    "success": success,
+                    "errorCode": int(result.error_code),
+                    "message": str(result.message),
+                    "goalStatus": goal_status,
+                },
+            }
+        )
+
+    def _fail_undocking(self, message: str, state: str = "ERROR") -> None:
+        with self._lock:
+            self._undock_goal_handle = None
+            self._undock_goal_pending = False
+            self._undock_cancel_requested = False
+        self._publish_undocking(
+            {
+                "active": False,
+                "state": state,
+                "result": {
+                    "success": False,
+                    "errorCode": -1,
+                    "message": message,
+                    "goalStatus": state,
+                },
+            }
+        )
+
+    def _publish_undocking(self, patch: dict) -> None:
+        patch["updatedAt"] = utc_now()
+        snapshot = robot_state.update({"undocking": patch})
+        self._publish(snapshot)
+
+    def start_mission(
+        self, mission_type: str, dock_id: str, auto_dock_on_complete: bool
+    ) -> tuple[bool, str]:
+        with self._lock:
+            client = self._mission_client
+            mission_type_cls = self._mission_type
+            active = self._mission_goal_pending or self._mission_goal_handle is not None
+
+        if active:
+            return False, "A mission is already active"
+        if not self._ros_available or client is None or mission_type_cls is None:
+            return False, "ROS mission client is not initialized"
+        if not client.server_is_ready():
+            return False, f"Mission action {self._mission_action_name} is unavailable"
+
+        goal = mission_type_cls.Goal()
+        goal.mission_type = mission_type
+        goal.dock_id = dock_id
+        goal.auto_dock_on_complete = auto_dock_on_complete
+
+        with self._lock:
+            self._mission_goal_pending = True
+            self._mission_cancel_requested = False
+            self._mission_start_time = monotonic()
+            self._mission_request = {
+                "mission_type": mission_type,
+                "dock_id": dock_id,
+                "started_at": datetime.now(timezone.utc),
+            }
+
+        self._publish_mission(
+            {
+                "active": True,
+                "phase": "SENDING",
+                "missionType": mission_type,
+                "dockId": dock_id,
+                "currentZone": None,
+                "progressPercent": 0.0,
+                "detail": "Sending mission goal",
+                "elapsedSeconds": 0,
+                "result": None,
+            }
+        )
+        try:
+            future = client.send_goal_async(goal, feedback_callback=self._mission_feedback)
+            future.add_done_callback(self._mission_goal_response)
+        except Exception as error:
+            self._fail_mission(f"Could not send mission goal: {error}")
+            return False, str(error)
+        return True, f"Mission goal sent for {dock_id}"
+
+    def cancel_mission(self) -> tuple[bool, str]:
+        with self._lock:
+            pending = self._mission_goal_pending
+            goal_handle = self._mission_goal_handle
+            if pending:
+                self._mission_cancel_requested = True
+
+        if pending and goal_handle is None:
+            self._publish_mission({"phase": "CANCELING"})
+            return True, "Mission cancellation queued"
+        if goal_handle is None:
+            return False, "There is no active mission"
+
+        self._publish_mission({"phase": "CANCELING"})
+        try:
+            goal_handle.cancel_goal_async()
+        except Exception as error:
+            self._fail_mission(f"Could not cancel mission: {error}")
+            return False, str(error)
+        return True, "Mission cancellation requested"
+
+    def _mission_goal_response(self, future) -> None:
+        try:
+            goal_handle = future.result()
+        except Exception as error:
+            self._fail_mission(f"Mission goal request failed: {error}")
+            return
+
+        if goal_handle is None or not goal_handle.accepted:
+            self._fail_mission("Mission goal was rejected", phase="REJECTED")
+            return
+
+        with self._lock:
+            self._mission_goal_pending = False
+            self._mission_goal_handle = goal_handle
+            cancel_requested = self._mission_cancel_requested
+
+        self._publish_mission({"active": True, "phase": "ACCEPTED"})
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(self._mission_result)
+        if cancel_requested:
+            goal_handle.cancel_goal_async()
+            self._publish_mission({"phase": "CANCELING"})
+
+    def _mission_feedback(self, message) -> None:
+        feedback = message.feedback
+        phase = self._mission_feedback_states.get(
+            feedback.phase,
+            f"PHASE_{feedback.phase}",
+        )
+        with self._lock:
+            elapsed = (
+                monotonic() - self._mission_start_time
+                if self._mission_start_time is not None
+                else 0.0
+            )
+        self._publish_mission(
+            {
+                "active": True,
+                "phase": phase,
+                "currentZone": feedback.current_zone or None,
+                "progressPercent": round(float(feedback.progress_percent), 1),
+                "detail": feedback.detail,
+                "elapsedSeconds": round(elapsed, 1),
+            }
+        )
+
+    def _mission_result(self, future) -> None:
+        try:
+            wrapped_result = future.result()
+            result = wrapped_result.result
+            goal_status = self._dock_goal_statuses.get(
+                wrapped_result.status,
+                f"STATUS_{wrapped_result.status}",
+            )
+        except Exception as error:
+            self._fail_mission(f"Mission result failed: {error}")
+            return
+
+        with self._lock:
+            self._mission_goal_handle = None
+            self._mission_goal_pending = False
+            self._mission_cancel_requested = False
+            start_time = self._mission_start_time
+            request = dict(self._mission_request or {})
+            self._mission_start_time = None
+
+        success = bool(result.success)
+        elapsed = monotonic() - start_time if start_time is not None else 0.0
+        self._publish_mission(
+            {
+                "active": False,
+                "phase": "SUCCEEDED" if success else goal_status,
+                "progressPercent": 100.0 if success else 0.0,
+                "elapsedSeconds": round(elapsed, 1),
+                "result": {
+                    "success": success,
+                    "areaCoveredM2": round(float(result.area_covered_m2), 2),
+                    "durationSeconds": round(float(result.duration_seconds), 1),
+                    "message": str(result.message),
+                    "goalStatus": goal_status,
+                },
+            }
+        )
+        self._record_mission(request, success, result.area_covered_m2, result.duration_seconds, str(result.message))
+
+    def _fail_mission(self, message: str, phase: str = "ERROR") -> None:
+        with self._lock:
+            self._mission_goal_handle = None
+            self._mission_goal_pending = False
+            self._mission_cancel_requested = False
+            request = dict(self._mission_request or {})
+            self._mission_start_time = None
+        self._publish_mission(
+            {
+                "active": False,
+                "phase": phase,
+                "result": {
+                    "success": False,
+                    "areaCoveredM2": 0.0,
+                    "durationSeconds": 0.0,
+                    "message": message,
+                    "goalStatus": phase,
+                },
+            }
+        )
+        self._record_mission(request, False, 0.0, 0.0, message)
+
+    def _record_mission(
+        self, request: dict, success: bool, area_covered_m2: float, duration_seconds: float, message: str
+    ) -> None:
+        if self._save_mission_record is None or not request:
+            return
+        self._save_mission_record(
+            {
+                "mission_type": request.get("mission_type", ""),
+                "dock_id": request.get("dock_id", ""),
+                "started_at": request.get("started_at", datetime.now(timezone.utc)),
+                "success": success,
+                "area_covered_m2": float(area_covered_m2),
+                "duration_seconds": float(duration_seconds),
+                "message": message,
+            }
+        )
+
+    def _publish_mission(self, patch: dict) -> None:
+        patch["updatedAt"] = utc_now()
+        snapshot = robot_state.update({"mission": patch})
+        self._publish(snapshot)
+
 
 def create_monitor(
     loop: asyncio.AbstractEventLoop,
@@ -991,9 +1448,24 @@ def create_monitor(
             last_snapshot_at = now
             asyncio.run_coroutine_threadsafe(save_snapshot(snapshot), loop)
 
+    def save_mission_record(record: dict) -> None:
+        asyncio.run_coroutine_threadsafe(
+            create_mission_record(
+                mission_type=record["mission_type"],
+                dock_id=record["dock_id"],
+                started_at=record["started_at"],
+                success=record["success"],
+                area_covered_m2=record["area_covered_m2"],
+                duration_seconds=record["duration_seconds"],
+                message=record["message"],
+            ),
+            loop,
+        )
+
     return RosMonitor(
         publish,
         dock_action_name,
         tag_frames=tag_frames,
         tag_normal_sign=tag_normal_sign,
+        save_mission_record=save_mission_record,
     )

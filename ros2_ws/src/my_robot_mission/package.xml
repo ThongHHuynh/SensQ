@@ -1,16 +1,26 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>csi_camera</name>
-  <version>0.0.0</version>
-  <description>Jetson CSI camera driver publishing sensor_msgs/Image and CameraInfo for AprilTag docking and the operator visualization stream</description>
+  <name>my_robot_mission</name>
+  <version>0.0.1</version>
+  <description>Mission sequencer orchestrating undock, coverage cleaning, and re-docking</description>
   <maintainer email="thonghuynh.0203@gmail.com">tom</maintainer>
   <license>Apache-2.0</license>
 
+  <buildtool_depend>ament_python</buildtool_depend>
+
   <depend>rclpy</depend>
-  <depend>sensor_msgs</depend>
-  <depend>cv_bridge</depend>
+  <depend>action_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>my_robot_docking</depend>
+  <depend>my_robot_docking_msgs</depend>
   <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

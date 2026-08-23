@@ -1,0 +1,23 @@
+# Goal
+string dock_id
+---
+# Result
+uint16 NONE=0
+uint16 UNKNOWN_DOCK=1
+uint16 SAFETY_STOP=2
+uint16 CONTROL_FAILED=3
+uint16 CANCELLED=4
+
+bool success
+uint16 error_code
+string message
+---
+# Feedback
+uint8 IDLE=0
+uint8 REVERSING=1
+uint8 ROTATING=2
+uint8 CLEARING=3
+uint8 COMPLETE=4
+
+uint8 state
+float64 distance_cleared

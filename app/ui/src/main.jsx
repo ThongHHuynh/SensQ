@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Activity, Anchor, Camera, Home, Map, Settings, Server } from "lucide-react";
+import { Activity, Anchor, Camera, Home, Map, Route, Settings, Server } from "lucide-react";
 import AppLayout from "./layout/AppLayout.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import DeviceStatusPage from "./pages/DeviceStatusPage.jsx";
 import DockingPage from "./pages/DockingPage.jsx";
 import MapsPage from "./pages/MapsPage.jsx";
+import MissionPage from "./pages/MissionPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import VisualizationPage from "./pages/VisualizationPage.jsx";
 import useRobotSnapshot from "./hooks/useRobotSnapshot.js";
@@ -16,6 +17,7 @@ const tabs = [
   { id: "status", label: "Device Status", icon: Activity },
   { id: "maps", label: "Maps", icon: Map },
   { id: "docking", label: "Docking", icon: Anchor },
+  { id: "mission", label: "Mission", icon: Route },
   { id: "visualization", label: "Visualization", icon: Camera },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "backend", label: "Backend", icon: Server, hidden: true }
@@ -26,16 +28,28 @@ function App() {
   const robotState = useRobotSnapshot();
 
   const pages = {
-    home: <HomePage {...robotState} onOpenDocking={() => setActiveTab("docking")} />,
+    home: (
+      <HomePage
+        {...robotState}
+        onOpenDocking={() => setActiveTab("docking")}
+        onOpenMission={() => setActiveTab("mission")}
+      />
+    ),
     status: <DeviceStatusPage robot={robotState.robot} />,
     maps: <MapsPage robot={robotState.robot} />,
     docking: <DockingPage robot={robotState.robot} />,
+    mission: <MissionPage robot={robotState.robot} />,
     visualization: <VisualizationPage robot={robotState.robot} />,
     settings: <SettingsPage robot={robotState.robot} />
   };
 
   return (
-    <AppLayout tabs={tabs.filter((tab) => !tab.hidden)} activeTab={activeTab} onTabChange={setActiveTab}>
+    <AppLayout
+      tabs={tabs.filter((tab) => !tab.hidden)}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      dataSource={robotState.source}
+    >
       {pages[activeTab]}
     </AppLayout>
   );

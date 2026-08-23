@@ -20,8 +20,8 @@ setup(
     zip_safe=True,
     maintainer='tom',
     maintainer_email='thonghuynh.0203@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Jetson CSI camera driver publishing sensor_msgs/Image and CameraInfo for AprilTag docking and the operator visualization stream',
+    license='Apache-2.0',
     extras_require={
         'test': [
             'pytest',

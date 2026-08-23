@@ -3,9 +3,9 @@
 <package format="3">
   <name>my_py_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Miscellaneous ROS 2 Python practice nodes (publishers, subscribers, and services) used during SensQ development</description>
   <maintainer email="thonghuynh.0203@gmail.com">tom</maintainer>
-  <license>TODO: License declaration</license>
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>example_interfaces</depend>

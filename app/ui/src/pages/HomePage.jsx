@@ -1,14 +1,19 @@
 import { useState } from "react";
-import { Anchor, Battery, Compass, Cpu, Radio } from "lucide-react";
+import { Anchor, ArrowUp, Battery, Compass, Cpu, Radio, Route } from "lucide-react";
 import MetricCard from "../components/MetricCard.jsx";
 import PageHeader from "../components/PageHeader.jsx";
 import RobotModelViewer from "../components/RobotModelViewer.jsx";
 import StatusBadge from "../components/StatusBadge.jsx";
-import { startMobileBase, stopRobot } from "../services/robotApi.js";
+import { cancelUndock, startMobileBase, stopRobot, undockRobot } from "../services/robotApi.js";
 
-function HomePage({ robot, setRobot, source, error, onOpenDocking }) {
+function HomePage({ robot, setRobot, source, error, onOpenDocking, onOpenMission }) {
   const launchState = robot.connection.launchState ?? "unknown";
   const [actionError, setActionError] = useState(null);
+  const [undockMessage, setUndockMessage] = useState(null);
+  const undocking = robot.undocking ?? {};
+  const undockActive = Boolean(undocking.active);
+  const mission = robot.mission ?? {};
+  const missionActive = Boolean(mission.active);
   const temperature =
     typeof robot.hardwareStatus.temperature === "number" ? `${robot.hardwareStatus.temperature.toFixed(1)} C` : "Waiting";
   const batteryPercent = typeof robot.battery.percent === "number" ? `${robot.battery.percent}%` : "Waiting";
@@ -39,6 +44,29 @@ function HomePage({ robot, setRobot, source, error, onOpenDocking }) {
     }
   }
 
+  async function handleUndock() {
+    const dockId = robot.docking?.request?.dock_id;
+    if (!dockId) {
+      setUndockMessage("No known dock to undock from yet.");
+      return;
+    }
+    try {
+      const response = await undockRobot(dockId);
+      setUndockMessage(response.message);
+    } catch (err) {
+      setUndockMessage(err.message);
+    }
+  }
+
+  async function handleUndockCancel() {
+    try {
+      const response = await cancelUndock();
+      setUndockMessage(response.message);
+    } catch (err) {
+      setUndockMessage(err.message);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -54,6 +82,22 @@ function HomePage({ robot, setRobot, source, error, onOpenDocking }) {
             >
               <Anchor className="h-4 w-4" aria-hidden="true" />
               Dock Robot
+            </button>
+            <button
+              type="button"
+              onClick={undockActive ? handleUndockCancel : handleUndock}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+            >
+              <ArrowUp className="h-4 w-4" aria-hidden="true" />
+              {undockActive ? "Cancel Undock" : "Undock Robot"}
+            </button>
+            <button
+              type="button"
+              onClick={onOpenMission}
+              className="inline-flex h-10 items-center gap-2 rounded-md border border-console-line bg-white px-3 text-sm font-semibold text-console-ink"
+            >
+              <Route className="h-4 w-4" aria-hidden="true" />
+              Start Mission
             </button>
             <button
               type="button"
@@ -77,7 +121,7 @@ function HomePage({ robot, setRobot, source, error, onOpenDocking }) {
         <MetricCard
           label="Connection"
           value={source === "backend" ? "Backend" : "Mock"}
-          detail={actionError ?? (error ? `Backend unavailable: ${error}` : `Launch ${launchState}`)}
+          detail={actionError ?? undockMessage ?? (error ? `Backend unavailable: ${error}` : `Launch ${launchState}`)}
           tone={connectionTone}
           statusLabel={source === "backend" ? "Online" : "Mock"}
         />
@@ -102,6 +146,15 @@ function HomePage({ robot, setRobot, source, error, onOpenDocking }) {
           tone={navigationTone}
           statusLabel={navigationTone === "ok" ? "Active" : "Idle"}
         />
+        {missionActive ? (
+          <MetricCard
+            label="Mission"
+            value={mission.phase ?? "IDLE"}
+            detail={mission.detail || `${Number(mission.progressPercent ?? 0).toFixed(0)}% complete`}
+            tone="ok"
+            statusLabel="Active"
+          />
+        ) : null}
       </section>
 
       <section className="mt-6 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">

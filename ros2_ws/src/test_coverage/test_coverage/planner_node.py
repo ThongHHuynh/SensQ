@@ -29,6 +29,7 @@ class CoveragePlannerNode(Node):
         super().__init__("coverage_planner")
         self._declare_parameters()
         self._map_message = None
+        self._costmap_message = None
         self._planning_lock = threading.Lock()
         self._auto_generated = False
 
@@ -41,6 +42,12 @@ class CoveragePlannerNode(Node):
             OccupancyGrid,
             self.get_parameter("map_topic").value,
             self._map_callback,
+            latched_qos,
+        )
+        self._costmap_subscription = self.create_subscription(
+            OccupancyGrid,
+            self.get_parameter("global_costmap_topic").value,
+            self._costmap_callback,
             latched_qos,
         )
         self._path_publisher = self.create_publisher(
@@ -92,6 +99,9 @@ class CoveragePlannerNode(Node):
             "max_astar_iterations": 100000,
             "optimize_cell_order": True,
             "auto_generate": False,
+            "global_costmap_topic": "/global_costmap/costmap",
+            "validate_against_costmap": True,
+            "costmap_lethal_threshold": 99,
         }
         for name, default in declarations.items():
             self.declare_parameter(name, default)
@@ -103,6 +113,62 @@ class CoveragePlannerNode(Node):
             f"{message.info.resolution:.3f} m/cell",
             once=True,
         )
+
+    def _costmap_callback(self, message: OccupancyGrid) -> None:
+        self._costmap_message = message
+
+    def _costmap_value_at(self, costmap: OccupancyGrid, x: float, y: float):
+        info = costmap.info
+        column = int((x - info.origin.position.x) / info.resolution)
+        row = int((y - info.origin.position.y) / info.resolution)
+        if column < 0 or row < 0 or column >= info.width or row >= info.height:
+            return None
+        return costmap.data[row * info.width + column]
+
+    def _validate_against_costmap(self, path: Path) -> list:
+        """Flag planned waypoints that fall inside lethal/inscribed costmap cells.
+
+        Runs after planning rather than gating it, since the coverage plan
+        is built from the static map and a stale or not-yet-published live
+        costmap should not block path generation -- it only marks cells
+        worth a second look before the robot follows them.
+        """
+
+        if not self.get_parameter("validate_against_costmap").value:
+            return []
+        costmap = self._costmap_message
+        if costmap is None:
+            self.get_logger().info(
+                "Costmap validation skipped: no message received on "
+                f"{self.get_parameter('global_costmap_topic').value}",
+                throttle_duration_sec=10.0,
+            )
+            return []
+
+        threshold = int(self.get_parameter("costmap_lethal_threshold").value)
+        blocked_points = []
+        for pose in path.poses:
+            value = self._costmap_value_at(
+                costmap,
+                pose.pose.position.x,
+                pose.pose.position.y,
+            )
+            if value is not None and value >= threshold:
+                blocked_points.append(
+                    Point(
+                        x=pose.pose.position.x,
+                        y=pose.pose.position.y,
+                        z=0.08,
+                    )
+                )
+
+        if blocked_points:
+            self.get_logger().warning(
+                f"{len(blocked_points)} coverage waypoint(s) fall inside "
+                f"lethal/inscribed costmap cells (threshold {threshold}); "
+                "see /test_coverage/markers ns=coverage_blocked"
+            )
+        return blocked_points
 
     def _generate_callback(self, _request, response):
         success, message = self._generate()
@@ -158,6 +224,21 @@ class CoveragePlannerNode(Node):
                 grid_map,
                 self.get_clock().now().to_msg(),
             )
+            blocked_points = self._validate_against_costmap(path)
+            if blocked_points:
+                blocked_marker = Marker()
+                blocked_marker.header.frame_id = plan.frame_id
+                blocked_marker.header.stamp = self.get_clock().now().to_msg()
+                blocked_marker.ns = "coverage_blocked"
+                blocked_marker.id = 0
+                blocked_marker.type = Marker.POINTS
+                blocked_marker.action = Marker.ADD
+                blocked_marker.scale.x = 0.06
+                blocked_marker.scale.y = 0.06
+                blocked_marker.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)
+                blocked_marker.points = blocked_points
+                markers.markers.append(blocked_marker)
+
             self._publish_segments(plan.points)
             self._path_publisher.publish(path)
             self._marker_publisher.publish(markers)
@@ -177,6 +258,7 @@ class CoveragePlannerNode(Node):
                 "transits": plan.metrics.transit_segments,
                 "planning_time_ms": round(plan.metrics.planning_time_ms, 1),
                 "warnings": plan.warnings,
+                "blocked_waypoints": len(blocked_points),
             }
             self._publish_status(metrics)
             message = json.dumps(metrics, separators=(",", ":"))

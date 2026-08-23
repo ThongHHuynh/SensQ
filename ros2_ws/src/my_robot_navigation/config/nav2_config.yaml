@@ -146,7 +146,7 @@ controller_server:
       primary_controller: dwb_core::DWBLocalPlanner
       angular_dist_threshold: 0.785       # ~45°: forces a full rotate-in-place above this heading error
       forward_sampling_distance: 0.5      # how far along the path it looks to compute target heading
-      rotate_to_heading_angular_vel: 1.0  # speed of the forced rotation
+      rotate_to_heading_angular_vel: 2.0  # speed of the forced rotation
       max_angular_accel: 3.2
       simulate_ahead_time: 1.0
 
@@ -154,7 +154,7 @@ controller_server:
       min_vel_x: 0.0
       max_vel_x: 0.7
       max_vel_y: 0.0
-      max_vel_theta: 1.0
+      max_vel_theta: 2.0
 
       min_speed_xy: 0.0
       max_speed_xy: 0.7
@@ -162,7 +162,7 @@ controller_server:
 
       acc_lim_x: 0.3
       acc_lim_y: 0.0
-      acc_lim_theta: 2.0
+      acc_lim_theta: 3.2
       decel_lim_x: -0.8
       decel_lim_y: 0.0
       decel_lim_theta: -2.5
@@ -367,11 +367,11 @@ velocity_smoother:
     scale_velocities: false
     feedback: OPEN_LOOP
 
-    max_velocity: [0.3, 0.0, 1.0]
-    min_velocity: [-0.3, 0.0, -1.0]
+    max_velocity: [0.3, 0.0, 2.0]
+    min_velocity: [-0.3, 0.0, -2.0]
 
     max_accel: [2.0, 0.0, 4.0]
-    max_decel: [-0.8, 0.0, -1.5]
+    max_decel: [-0.8, 0.0, -2.5]
     odom_topic: /odometry/filtered
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

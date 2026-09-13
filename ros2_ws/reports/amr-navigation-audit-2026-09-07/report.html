@@ -1,0 +1,1070 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AMR navigation & docking audit</title><style>
+:root{--ink:#152739;--muted:#536578;--line:#d8e0e7;--blue:#075f77;--bg:#f3f6f8}*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--bg);font:16px/1.6 system-ui,sans-serif}header{background:#112d40;color:white;padding:54px max(6vw,24px) 38px}header p{max-width:870px;color:#d4e4ee}h1{font-size:clamp(30px,5vw,52px);line-height:1.1;max-width:900px;margin:14px 0}h2{font-size:27px;margin-top:0}h3{font-size:20px;line-height:1.35;margin:12px 0}.eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase}.wrap{max-width:1180px;margin:auto;padding:28px 24px}nav{display:flex;flex-wrap:wrap;gap:18px;padding-bottom:22px}a{color:var(--blue)}header a{color:#b4e8ff}section{margin:0 0 38px}.panel,.finding,.phase{background:white;border:1px solid var(--line);border-radius:12px;padding:25px;margin:16px 0}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.metric{background:white;border:1px solid var(--line);border-radius:10px;padding:19px}.metric b{font-size:28px;display:block}.muted{color:var(--muted)}.badge{border-radius:5px;padding:4px 8px;font-weight:750;margin-right:8px}.P0{background:#ffe0de;color:#922222}.P1{background:#fff0cd;color:#7e5100}.P2{background:#dceef4;color:#075f77}table{border-collapse:collapse;width:100%;background:white;font-size:14px}th,td{padding:15px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:#e7edf1}.table{overflow-x:auto}details{border-top:1px solid var(--line);padding-top:14px;margin-top:20px}summary{cursor:pointer;color:var(--blue);font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f1f5f7;padding:15px;font:12px/1.5 ui-monospace,monospace}.ref{font:12px ui-monospace,monospace;overflow-wrap:anywhere}.controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;position:sticky;top:0;background:#f3f6f8f5;padding:12px 0;z-index:2}select,input,button{font:inherit;padding:9px 12px;border:1px solid #9eafbc;border-radius:6px;background:white;color:var(--ink)}input{flex:1;min-width:180px}.flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.flow span{background:#e3f0f4;border-radius:7px;padding:11px 15px}.note{border-left:4px solid #09819a;padding:12px 18px;background:#eaf4f7}.finding[hidden]{display:none}.phase{border-left:5px solid #087c95}footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding:20px 0}@media(max-width:700px){.metrics{grid-template-columns:1fr 1fr}.wrap{padding:20px 14px}.panel,.finding,.phase{padding:19px}td{min-width:155px}}@media print{body{background:white;font-size:11px}.wrap{max-width:none;padding:0}header{padding:20px;background:white;color:#152739}header p{color:#536578}h1{font-size:30px}.controls,nav,button{display:none!important}.finding[hidden]{display:block}.finding,.phase{break-inside:avoid}section{margin-bottom:20px}a{color:inherit}.metric b{font-size:22px}}
+</style></head><body><header><div class="eyebrow">Engineering audit · 07 September 2026 · ROS 2 Humble</div><h1>A capable navigation prototype.<br>Industrial readiness needs stronger failure handling.</h1><p>Prioritize motion protection and ownership, then prove docking contact and charging. Preserve the existing navigation and corridor-control foundation while developing the missing platform lifecycle.</p><p>Read-only workspace review · No robot motion, configuration edits, builds or deployments</p></header><main class="wrap"><nav><a href="#verdict">Assessment</a><a href="#capabilities">Capabilities</a><a href="#architecture">Architecture</a><a href="#findings">Findings</a><a href="#roadmap">Development plan</a><a href="#validation">Acceptance plan</a><a href="#scope">Evidence & scope</a><button onclick="window.print()">Print / save PDF</button></nav>
+<section id="verdict"><div class="metrics"><div class="metric"><b>5</b>P0 code/config blockers</div><div class="metric"><b>19</b>Prioritized findings</div><div class="metric"><b>125 / 128</b>Selected tests passed</div><div class="metric"><b>Not proven</b>Industrial readiness</div></div><div class="panel"><h2>Assessment</h2><p>The repository has a meaningful working foundation: Nav2 point-to-point navigation, AMCL/EKF, SLAM configuration, a custom docking action, reusable docking geometry, visual anchoring, bounded retries, reverse approach, station recording and coverage execution. It should not yet be treated as a qualified unattended AMR platform.</p><p>The highest-risk gaps sit at subsystem boundaries: lost commands can release the wrong motion source, invalid sensing can look clear, the collision model excludes overhang, and encoder feedback loss does not stop the interface. Docking success currently means an estimated pose was held; it does not establish physical engagement or charging.</p><p><strong>Recommended order:</strong> fix protective motion and hardware fault handling → stabilize navigation/mapping → develop verified docking/charging/undocking → add durable transport missions → integrate lift/drop.</p><p class="note">P0 = block unattended operation until resolved and verified. P1 = required for the reliable platform lifecycle. P2 = hardening, consistency or maintainability. These priorities are engineering judgments, not a measured safety classification or certification.</p></div></section>
+<section id="capabilities"><h2>Requested feature readiness</h2><div class="table"><table><thead><tr><th>Feature</th><th>Assessment</th><th>Existing foundation</th><th>Develop / improve</th></tr></thead><tbody><tr><td>Point-to-point travel</td><td>Implemented primitives</td><td>Nav2 NavigateToPose, AMCL, NavFn, rotation-shim/DWB</td><td>Readiness gate, full footprint, robust cancel, named stations, blocked-goal policy and arrival/stopped criteria.</td></tr><tr><td>Docking</td><td>Implemented prototype</td><td>Custom Dock action, tag tracking, corridor control, bounded retries and reverse approach</td><td>Close D01–D08; qualify repeatability against independent physical measurements.</td></tr><tr><td>Charging + undocking</td><td>Not found in workspace</td><td>No BMS/charger/contact lifecycle found</td><td>Contact and electrical verification, charge manager, low-energy return, safe disconnect and dedicated undock action.</td></tr><tr><td>Automatic missions</td><td>Partial</td><td>Waypoint follower plus coverage executor</td><td>Persistent transport jobs, pause/resume, energy policy, station reservation, recovery and operator fault handling.</td></tr><tr><td>Mapping + localization</td><td>Partial; launch gap</td><td>SLAM Toolbox config, maps, AMCL/EKF</td><td>Repair standalone mapping TF, save/load workflow, map versioning, relocation handling and mode switching.</td></tr><tr><td>Lift/drop + deposit</td><td>Future development</td><td>No lift actuator interface or package-transfer workflow found</td><td>Actuator action, homing/limits, load/presence sensing, motion interlocks, loaded footprint and confirmed deposit transaction.</td></tr><tr><td>Industrial operation</td><td>Not demonstrated</td><td>Software timeouts, tests and selected diagnostics</td><td>Protective stopping, health supervisor, release/rollback process, trace logs and assembled-platform qualification.</td></tr></tbody></table></div></section>
+<section id="architecture"><h2>Command and state architecture</h2><div class="panel"><h3>Current supported hardware navigation path</h3><div class="flow"><span>Nav2 controller</span>→<span>/cmd_vel_nav</span>→<span>Velocity smoother</span>→<span>/cmd_vel</span>→<span>Velocity arbiter</span>→<span>/cmd_vel_out</span>→<span>diff_drive_controller</span>→<span>Serial driver / MCU</span></div><p>Docking publishes <code>/cmd_vel_dock</code> into the arbiter at higher freshness priority. The installed Nav2 behavior server publishes to <code>/cmd_vel</code> through its unremapped command output, so recovery commands join downstream of navigation smoothing. The proposed final protective stop must cover every motion source.</p><p>Hardware TF ownership is structurally correct in <code>my_robot_navigation/bringup.launch.py</code>: AMCL owns <code>map → odom</code>, EKF owns <code>odom → base_footprint</code>, and robot_state_publisher owns the sensor/joint tree. The mapping launch does not establish the same contract (N02).</p><p>Simulation uses the Gazebo drive/bridge path and a simulation EKF, rather than the physical serial/ros2_control path. Passing simulation does not test firmware, electrical contact or real braking.</p><h3>Target operational lifecycle</h3><div class="flow"><span>BOOT / SELF-CHECK</span>→<span>LOCALIZED / READY</span>→<span>MISSION</span>→<span>DOCK / CONTACT</span>→<span>CHARGE VERIFIED</span>→<span>UNDOCK</span>→<span>READY</span></div><p>Every motion state needs a transition to a latched stopped/fault state. Manual recovery must re-establish readiness before resuming. A mission manager owns the job; a motion supervisor owns command authority; charger and lift managers own their respective interlocks.</p><h3>Docking sequence actually implemented</h3><p><code>Optional Nav2 predock → tag search → corridor entry/alignment/run → pose hold → success</code>. Tag failures may trigger bounded backup/rotation/reacquisition. Reverse mode shortens the blind entry by using staging distance. The current server does not execute the separate staging verification phases described in README as distinct orchestrated stages.</p><p><strong>Keep:</strong> database validation and atomic recording; rejection of overlapping Dock goals; timestamp-matched tag TF; bounded timeouts/retries; acceleration-limited dock commands; stop calls on exceptions/finalization; controller tests; RViz trails. Strengthen their integration rather than replacing the entire stack.</p></div></section>
+<section id="findings"><h2>Prioritized findings</h2><p>Each item includes its evidence status, recommended work and an acceptance test. Expand the embedded source excerpts to review the exact code without needing this workspace.</p><div class="controls"><label for="priority">Priority</label><select id="priority"><option value="all">All</option><option>P0</option><option>P1</option><option>P2</option></select><input id="search" type="search" aria-label="Search findings" placeholder="Search docking, sensors, charging…"><span id="count" aria-live="polite">19 findings</span></div><article class="finding" data-priority="P0" id="D01"><div class="eyebrow"><span class="badge P0">P0</span> D01 · Confirmed code behavior</div><h3>Obstacle checks are bypassed near the dock</h3><p>The corridor controller returns no directional safety fault whenever tag distance is within target_distance + dock_contact_distance. Hardware stations use a 0.30 m final distance and the band is 0.15 m, so the exemption begins at 0.45 m from the tag. It exempts any obstacle in that sector, without identifying the dock surface. Rotations also exclude a ±0.60 rad sector around the tag. The 0.10 m minimum tag distance cannot detect an intervening object. The same helper also handles retreat motion.</p><p><strong>Improve:</strong> Replace broad sector exemptions with a bounded, station-specific contact envelope and validated dock-surface filtering. Keep unrelated obstacles and the swept robot footprint protected during entry, turning, reverse and retreat. Add a final protective stop path downstream of motion arbitration; independent hardware protection must remain effective during intended contact.</p><p><strong>Acceptance:</strong> Inject obstacles beside and directly between robot and dock at every phase, including inside the contact band and rotation exclusion. Each must prevent contact with the obstacle. Verify the intended dock remains reachable.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1479-1528</p><pre>1479      def _corridor_safety_reason(
+1480          self,
+1481          state,
+1482          linear,
+1483          tag_distance,
+1484          target_distance,
+1485          anchor,
+1486          robot_pose,
+1487      ):
+1488          if tag_distance &lt; self.minimum_tag_distance:
+1489              return &#x27;Tag is inside the minimum safe distance&#x27;
+1490  
+1491          if state in ApproachState.ROTATING:
+1492              bearing = normalize_angle(
+1493                  math.atan2(
+1494                      anchor.y - robot_pose.y,
+1495                      anchor.x - robot_pose.x,
+1496                  )
+1497                  - robot_pose.yaw
+1498              )
+1499              clearance = self._rotation_clearance(exclude_bearing=bearing)
+1500              if clearance &lt; self.rotation_stop_distance:
+1501                  return (
+1502                      f&#x27;Obstacle at {clearance:.3f} m is inside the &#x27;
+1503                      f&#x27;{self.rotation_stop_distance:.3f} m rotation &#x27;
+1504                      &#x27;stop distance&#x27;
+1505                  )
+1506              return None
+1507  
+1508          if abs(linear) &lt; 1e-6:
+1509              return None
+1510  
+1511          # At the dock face the dock itself fills the sector being driven into,
+1512          # so the directional stop would fire on the target. minimum_tag_distance
+1513          # is the guard that remains inside that band.
+1514          if tag_distance &lt;= target_distance + self.dock_contact_distance:
+1515              return None
+1516  
+1517          reverse = linear &lt; 0.0
+1518          clearance = self._rear_clearance if reverse else self._front_clearance
+1519          stop_distance = (
+1520              self.rear_stop_distance if reverse else self.front_stop_distance
+1521          )
+1522          direction = &#x27;Rear&#x27; if reverse else &#x27;Front&#x27;
+1523          if clearance &lt; stop_distance:
+1524              return (
+1525                  f&#x27;{direction} obstacle at {clearance:.3f} m is inside &#x27;
+1526                  f&#x27;the {stop_distance:.3f} m stop distance&#x27;
+1527              )
+1528          return None</pre><p class="ref">src/my_robot_docking/config/docking_config.yaml:112-132</p><pre> 112      sensor_timeout: 0.50
+ 113      command_timeout: 0.25
+ 114      require_fresh_odometry: true
+ 115      require_fresh_scan: true
+ 116      tag_normal_sign: -1.0
+ 117  
+ 118      # RViz reference targets and stage-colored executed trails
+ 119      visualization_enabled: true
+ 120      visualization_topic: /docking/markers
+ 121      visualization_line_width: 0.03
+ 122      visualization_min_point_distance: 0.01
+ 123      visualization_publish_rate: 10.0
+ 124      visualization_maximum_points: 3000
+ 125  
+ 126      # The launch file should override this with the installed database path.
+ 127      dock_database_file: &quot;&quot;
+ 128  
+ 129  velocity_arbiter:
+ 130    ros__parameters:
+ 131      use_sim_time: true
+ 132      nav_input_topic: /cmd_vel</pre></details></article><article class="finding" data-priority="P0" id="D02"><div class="eyebrow"><span class="badge P0">P0</span> D02 · Confirmed code behavior; trigger requires concurrent Nav2 traffic</div><h3>Docking command loss can release control back to navigation</h3><p>The arbiter selects docking only while its last Twist is fresh; after 0.25 s it selects fresh navigation traffic. There is no docking ownership lease, latched fault, or docked/charging inhibit. A docking crash, hang, completed goal or safety abort can therefore expose another active navigation publisher. A final zero Twist only holds priority briefly.</p><p><strong>Improve:</strong> Introduce explicit motion ownership and a latched safe-stop state. Loss of the active owner must stop the base until an authorized state transition releases it. Serialize navigation, docking, coverage and teleoperation; reject non-finite commands and use a monotonic watchdog for hardware motion.</p><p><strong>Acceptance:</strong> Keep a navigation command stream active while killing or stalling docking and while canceling or completing a dock goal. Output must stay zero until ownership is explicitly transferred. Test clock jumps and invalid Twist values.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/velocity_arbiter.py:65-94</p><pre>  65              self._nav_stamp = self.get_clock().now()
+  66  
+  67      def _dock_callback(self, message):
+  68          with self._lock:
+  69              self._dock_command = self._copy_twist(message)
+  70              self._dock_stamp = self.get_clock().now()
+  71  
+  72      def _publish_selected(self):
+  73          now = self.get_clock().now()
+  74          with self._lock:
+  75              dock_fresh = (
+  76                  self._dock_stamp is not None
+  77                  and (now - self._dock_stamp).nanoseconds / 1e9
+  78                  &lt;= self._dock_timeout
+  79              )
+  80              nav_fresh = (
+  81                  self._nav_stamp is not None
+  82                  and (now - self._nav_stamp).nanoseconds / 1e9
+  83                  &lt;= self._nav_timeout
+  84              )
+  85  
+  86              if dock_fresh:
+  87                  command = self._copy_twist(self._dock_command)
+  88              elif nav_fresh:
+  89                  command = self._copy_twist(self._nav_command)
+  90              else:
+  91                  command = Twist()
+  92  
+  93          self._publisher.publish(command)
+  94  </pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:789-794</p><pre> 789          finally:
+ 790              self._stop_robot()
+ 791              with self._goal_lock:
+ 792                  self._busy = False
+ 793              self._active_dock_goal = None
+ 794              self._active_nav_goal = None</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1602-1606</p><pre>1602      def _stop_robot(self):
+1603          stop = Twist()
+1604          self.cmd_vel_publisher.publish(stop)
+1605          self._last_command = stop
+1606          self._last_command_time = time.monotonic()</pre></details></article><article class="finding" data-priority="P0" id="N01"><div class="eyebrow"><span class="badge P0">P0</span> N01 · Confirmed configuration/model mismatch</div><h3>Nav2 collision geometry excludes the camera overhang</h3><p>Both hardware costmaps use robot_radius: 0.10 m. The included camera collision box is centered at x=0.15 m with 0.025 m length, reaching x=0.1625 m; its outer corner is farther still. Inflation assigns costs but does not correct an undersized collision footprint. Docking already assumes about 0.17 m circumscribed radius. Actual physical dimensions still need measurement.</p><p><strong>Improve:</strong> Define a measured polygon or conservative enclosing footprint shared by planning, control, recovery, docking protection and coverage. Include camera, bumpers, connectors and future package overhang. Maintain unloaded and loaded envelopes.</p><p><strong>Acceptance:</strong> Check swept clearance through narrow passages and in-place turns with ground-truth geometry. A path that clips any modeled or measured overhang must be rejected.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:220-231</p><pre> 220        update_frequency: 10.0
+ 221        publish_frequency: 5.0
+ 222        global_frame: odom
+ 223        robot_base_frame: base_footprint
+ 224        use_sim_time: False
+ 225        rolling_window: true
+ 226        width: 3
+ 227        height: 3
+ 228        resolution: 0.05
+ 229        robot_radius: 0.1
+ 230        plugins: [&quot;voxel_layer&quot;, &quot;inflation_layer&quot;]
+ 231        inflation_layer:</pre><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:262-270</p><pre> 262      ros__parameters:
+ 263        update_frequency: 5.0
+ 264        publish_frequency: 5.0
+ 265        global_frame: map
+ 266        robot_base_frame: base_footprint
+ 267        use_sim_time: False
+ 268        robot_radius: 0.1
+ 269        resolution: 0.05
+ 270        track_unknown_space: false</pre><p class="ref">src/my_robot_description/urdf/camera.urdf.xacro:54-72</p><pre>  54          &lt;/collision&gt;
+  55      &lt;/link&gt;
+  56  
+  57      &lt;joint name=&quot;camera_joint&quot; type=&quot;fixed&quot;&gt;
+  58          &lt;parent link=&quot;base_link&quot;/&gt;
+  59          &lt;child link=&quot;camera_link&quot;/&gt;
+  60          &lt;!-- Keep the existing camera mounting position. --&gt;
+  61          &lt;origin xyz=&quot;0.15 0 0.10&quot; rpy=&quot;0 0 0&quot;/&gt;
+  62      &lt;/joint&gt;
+  63  
+  64      &lt;!-- ROS optical convention: +Z forward, +X right, +Y down. --&gt;
+  65      &lt;link name=&quot;camera_optical_frame&quot;/&gt;
+  66      &lt;joint name=&quot;camera_optical_joint&quot; type=&quot;fixed&quot;&gt;
+  67          &lt;parent link=&quot;camera_link&quot;/&gt;
+  68          &lt;child link=&quot;camera_optical_frame&quot;/&gt;
+  69          &lt;origin xyz=&quot;0.0125 0 0&quot; rpy=&quot;-1.57079632679 0 -1.57079632679&quot;/&gt;
+  70          &lt;!-- &lt;origin xyz=&quot;0.0125 0 0&quot; rpy=&quot;0 0 0&quot;/&gt; --&gt;
+  71      &lt;/joint&gt;
+  72  </pre></details></article><article class="finding" data-priority="P0" id="H01"><div class="eyebrow"><span class="badge P0">P0</span> H01 · Confirmed against installed Humble headers</div><h3>Configured base velocity limits are not enabled</h3><p>The diff-drive YAML sets linear/angular maximum values but omits has_velocity_limits, which defaults to false in installed diff_drive_controller 2.53.3. Acceleration limits are also disabled by default. There is a default 0.5 s controller command timeout and a 250 ms watchdog in control/control.ino: these protections exist, but do not replace enabled body limits. Whether this sketch is flashed was not verified.</p><p><strong>Improve:</strong> Explicitly enable and commission base velocity and acceleration limits, and declare the command timeout. Apply the same approved envelope to every command source; validate driver/firmware wheel saturation under combined linear and angular commands. Retain firmware timeout independently of ROS.</p><p><strong>Acceptance:</strong> Exercise overspeed commands, reversals, arcs and loss of ROS command traffic on a controlled bench. Measure actual stop distance and latency under maximum payload and worst traction; do not infer them from parameter values.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_bringup/config/my_robot_controller.yaml:24-33</p><pre>  24      #enable_odom_tf: true for raw odom, false for filtered odom
+  25      enable_odom_tf: false
+  26      publish_rate: 50.0 #should be double
+  27      use_stamped_vel: false
+  28  
+  29      linear.x.max_velocity: 0.5
+  30      linear.x.min_velocity: -0.25
+  31  
+  32      angular.z.max_velocity: 2.0
+  33      angular.z.min_velocity: -2.0</pre><p class="ref">/opt/ros/humble/include/diff_drive_controller/diff_drive_controller_parameters.hpp:87-116</p><pre>  87          bool open_loop = false;
+  88          bool position_feedback = true;
+  89          bool enable_odom_tf = true;
+  90          double cmd_vel_timeout = 0.5;
+  91          bool publish_limited_velocity = false;
+  92          int64_t velocity_rolling_window_size = 10;
+  93          bool use_stamped_vel = true;
+  94          double publish_rate = 50.0;
+  95          struct Linear {
+  96              struct X {
+  97                  bool has_velocity_limits = false;
+  98                  bool has_acceleration_limits = false;
+  99                  bool has_jerk_limits = false;
+ 100                  double max_velocity = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 101                  double min_velocity = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 102                  double max_acceleration = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 103                  double min_acceleration = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 104                  double max_jerk = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 105                  double min_jerk = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 106              } x;
+ 107          } linear;
+ 108          struct Angular {
+ 109              struct Z {
+ 110                  bool has_velocity_limits = false;
+ 111                  bool has_acceleration_limits = false;
+ 112                  bool has_jerk_limits = false;
+ 113                  double max_velocity = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 114                  double min_velocity = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 115                  double max_acceleration = std::numeric_limits&lt;double&gt;::quiet_NaN();
+ 116                  double min_acceleration = std::numeric_limits&lt;double&gt;::quiet_NaN();</pre><p class="ref">control/control.ino:73-75</p><pre>  73  uint32_t last_cmd_ms = 0;
+  74  // No command more than 250ms -&gt; stop
+  75  const uint32_t CMD_TIMEOUT_MS = 250; // stop motors if no command</pre></details></article><article class="finding" data-priority="P0" id="H02"><div class="eyebrow"><span class="badge P0">P0</span> H02 · Confirmed code behavior</div><h3>Lost encoder feedback does not fault the drive interface</h3><p>Hardware read() returns OK with no valid count packets and retains previous state. Serial read errors are converted to zero bytes. There is no age deadline for valid encoder frames, sequence number or MCU reset detection. If host writes continue while telemetry is lost, firmware command timeout alone does not address the failure. Invalid data without newlines can grow the receive buffer.</p><p><strong>Improve:</strong> Add a bounded parser, valid-packet watchdog, reset/sequence detection, plausibility checks and a fault state that inhibits motor commands. Timestamp samples; use actual sample intervals for velocity. The current per-controller-period velocity calculation is inaccurate for delayed/batched packets, although position feedback is the default odometry input.</p><p><strong>Acceptance:</strong> Drop telemetry while continuing command writes, inject corrupt/truncated frames, and reset the MCU with nonzero encoder totals. Fault and stop within the commissioned deadline; prevent odometry jumps and require deliberate recovery.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_hardware/src/mobile_base_hardware_interface.cpp:118-174</p><pre> 118  hardware_interface::return_type MobileBaseHardwareInterface::read(const rclcpp::Time &amp;, const rclcpp::Duration &amp; period)
+ 119  {
+ 120    if (!serial_.is_open())
+ 121      return hardware_interface::return_type::ERROR;
+ 122  
+ 123    // Pull available bytes
+ 124    char tmp[256];
+ 125    int n = serial_.read_bytes(tmp, sizeof(tmp), timeout_ms_);
+ 126    if (n &gt; 0)
+ 127      rx_buffer_.append(tmp, tmp + n);
+ 128  
+ 129    // Parse complete lines
+ 130    std::size_t pos_nl;
+ 131    while ((pos_nl = rx_buffer_.find(&#x27;\n&#x27;)) != std::string::npos)
+ 132    {
+ 133      std::string line = rx_buffer_.substr(0, pos_nl);
+ 134      rx_buffer_.erase(0, pos_nl + 1);
+ 135  
+ 136      // Expected: &quot;C left right&quot;
+ 137      if (line.size() &lt; 1) continue;
+ 138      if (line[0] != &#x27;C&#x27;) continue;
+ 139  
+ 140      std::istringstream iss(line); //create string stream
+ 141      char tag;
+ 142      long long lc, rc;
+ 143      if (!(iss &gt;&gt; tag &gt;&gt; rc &gt;&gt; lc)) continue; //read tag -&gt; left commanf -&gt; right command
+ 144  
+ 145      if (invert_left_enc_)  lc = -lc;
+ 146      if (invert_right_enc_) rc = -rc;
+ 147  
+ 148      const double dt = std::max(1e-6, period.seconds());
+ 149      const double rad_per_count = 2.0 * M_PI / std::max(1.0, counts_per_rev_);
+ 150  
+ 151      if (!have_counts_)
+ 152      {
+ 153        last_counts_[0] = lc;
+ 154        last_counts_[1] = rc;
+ 155        have_counts_ = true;
+ 156        continue;
+ 157      }
+ 158  
+ 159      const long long dl = lc - last_counts_[0];
+ 160      const long long dr = rc - last_counts_[1];
+ 161      last_counts_[0] = lc;
+ 162      last_counts_[1] = rc;
+ 163  
+ 164      const double dtheta_l = static_cast&lt;double&gt;(dl) * rad_per_count;
+ 165      const double dtheta_r = static_cast&lt;double&gt;(dr) * rad_per_count;
+ 166  
+ 167      hw_pos_[0] += dtheta_l;
+ 168      hw_pos_[1] += dtheta_r;
+ 169  
+ 170      hw_vel_[0] = dtheta_l / dt;
+ 171      hw_vel_[1] = dtheta_r / dt;
+ 172    }
+ 173  
+ 174    return hardware_interface::return_type::OK;</pre><p class="ref">src/my_robot_hardware/src/serial_port.cpp:94-108</p><pre>  94    if (n &lt; 0) return 0;
+  95    return n;
+  96  }
+  97  
+  98  bool SerialPort::write_string(const std::string &amp; s)
+  99  {
+ 100    if (fd_ &lt; 0) return false; //check port
+ 101  
+ 102    const char * p = s.c_str();
+ 103    std::size_t left = s.size(); //number of bytes to fill 
+ 104  
+ 105    while (left &gt; 0)
+ 106    {
+ 107      int n = ::write(fd_, p, left); //write left number of bytes, starting from p
+ 108      if (n &lt; 0) return false;</pre></details></article><article class="finding" data-priority="P1" id="D03"><div class="eyebrow"><span class="badge P1">P1</span> D03 · Confirmed feature gap in audited workspace</div><h3>Dock success confirms pose, not contact or charging</h3><p>Success follows pose tolerances held for 0.30 s: ±0.03 m along/cross and ±0.08 rad yaw. The action result has no contact, charger or battery fields; the server subscribes to odometry, scan and detections. The configured final tag distance is 0.30 m, not a physical contact measurement. No BMS/charger integration or dedicated Undock action was found in this workspace.</p><p><strong>Improve:</strong> Define separate ALIGNED, CONTACT_CONFIRMED and CHARGING_CONFIRMED states. Add contact sensing, charger enable/disable handshake, BMS voltage/current/temperature/fault telemetry, charging timeout and bounded reseating. Develop an Undock action that disables charging, confirms electrical separation, clears the station safely and releases motion ownership.</p><p><strong>Acceptance:</strong> Correct pose with charger unplugged must never report charging success. Test dirty/misaligned contacts, failed charger, interrupted current, full battery and undocking cancellation. Mechanical capture and electrical thresholds must come from the selected dock/BMS.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1352-1369</p><pre>1352              if update.reached:
+1353                  self._stop_robot()
+1354                  if verification_started is None:
+1355                      verification_started = time.monotonic()
+1356                  self._publish_feedback(
+1357                      goal_handle,
+1358                      Dock.Feedback.VERIFYING,
+1359                      error.along,
+1360                      error.cross,
+1361                      error.yaw,
+1362                      retries,
+1363                  )
+1364                  if (
+1365                      time.monotonic() - verification_started
+1366                      &gt;= self.verification_duration
+1367                  ):
+1368                      return ApproachOutcome.SUCCEEDED, success_message
+1369              else:</pre><p class="ref">src/my_robot_docking_msgs/action/Dock.action:1-29</p><pre>   1  # Goal
+   2  string dock_id
+   3  bool navigate_to_staging_pose
+   4  bool use_offset_override
+   5  float32 final_distance
+   6  float32 lateral_offset
+   7  float32 yaw_offset
+   8  ---
+   9  # Result
+  10  uint16 NONE=0
+  11  uint16 UNKNOWN_DOCK=1
+  12  uint16 NAVIGATION_FAILED=2
+  13  uint16 TAG_NOT_FOUND=3
+  14  uint16 TAG_LOST=4
+  15  uint16 CONTROL_FAILED=5
+  16  uint16 SAFETY_STOP=6
+  17  uint16 VERIFY_FAILED=7
+  18  uint16 CANCELLED=8
+  19  
+  20  bool success
+  21  uint16 error_code
+  22  string message
+  23  ---
+  24  # Feedback
+  25  uint8 IDLE=0
+  26  uint8 NAVIGATING=1
+  27  uint8 SEARCHING=2
+  28  uint8 APPROACHING=3
+  29  uint8 ALIGNING=4</pre><p class="ref">src/my_robot_docking/config/dock_database.yaml:13-23</p><pre>  13    home_dock:
+  14      tag_id: 1
+  15      tag_frame: &quot;tag_1&quot;
+  16      global_frame: &quot;map&quot;
+  17      reference_pose: [-0.185, -0.188, 1.577]
+  18      staging_pose: [0.131, -0.196, -3.129]
+  19      predocking_distance: 0.816101
+  20      final_distance: 0.3
+  21      lateral_offset: 0.0
+  22      yaw_offset: 0.0
+  23      reverse_docking: false</pre></details></article><article class="finding" data-priority="P1" id="D04"><div class="eyebrow"><span class="badge P1">P1</span> D04 · Confirmed timing mismatch; physical error unmeasured</div><h3>Tag anchoring combines measurements from different times</h3><p>TagTracker obtains base-to-tag at the image timestamp, but docking transforms that pose with the latest odometry pose. A moving robot therefore builds an inconsistent odom-frame anchor. The running blend can also apply the same detection repeatedly, making smoothing depend on controller rate. Initial acquisition deduplicates timestamps but accepts fewer than anchor_samples when its timeout expires.</p><p><strong>Improve:</strong> Obtain odom-to-tag at the detection timestamp or interpolate odometry to that time. Blend each observation once; gate position/yaw innovations, observation quality and minimum independent samples. Track anchor uncertainty and age explicitly.</p><p><strong>Acceptance:</strong> Replay delayed camera data while translating and rotating past a stationary tag. Its odom-frame pose should remain stable within the allocated error budget. Duplicate frames must not change filtering weight.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/tag_tracker.py:64-89</p><pre>  64          &quot;&quot;&quot;Return a fresh observation, or ``None`` when unavailable/stale.&quot;&quot;&quot;
+  65  
+  66          with self._lock:
+  67              detection = self._detections.get(tag_id)
+  68  
+  69          if detection is None:
+  70              return None
+  71  
+  72          stamp = Time.from_msg(detection)
+  73          now = self._node.get_clock().now()
+  74          age = (now - stamp).nanoseconds / 1e9
+  75  
+  76          if age &lt; -self._transform_timeout or age &gt; self._tag_timeout:
+  77              return None
+  78  
+  79          try:
+  80              transform = self._tf_buffer.lookup_transform(
+  81                  self._base_frame,
+  82                  tag_frame,
+  83                  stamp,
+  84                  timeout=Duration(seconds=self._transform_timeout),
+  85              )
+  86          except TransformException:
+  87              return None
+  88  
+  89          translation = transform.transform.translation</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1266-1282</p><pre>1266              observation = self.tag_tracker.latest(dock.tag_id, dock.tag_frame)
+1267              tag_fresh = observation is not None
+1268              if tag_fresh:
+1269                  last_tag_seen = time.monotonic()
+1270                  anchor = self._blend_pose(
+1271                      anchor,
+1272                      transform_pose(
+1273                          robot_pose,
+1274                          Pose2D(
+1275                              observation.x,
+1276                              observation.y,
+1277                              observation.normal_yaw,
+1278                          ),
+1279                      ),
+1280                  )
+1281                  controller.anchor(anchor)
+1282              elif (</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1400-1434</p><pre>1400          poses = []
+1401          stamps = set()
+1402          deadline = time.monotonic() + self.anchor_timeout
+1403          period = 1.0 / self.control_rate
+1404  
+1405          while (
+1406              rclpy.ok()
+1407              and time.monotonic() &lt; deadline
+1408              and len(poses) &lt; self.anchor_samples
+1409          ):
+1410              observation = self.tag_tracker.latest(dock.tag_id, dock.tag_frame)
+1411              robot_pose = self._latest_odom_pose()
+1412              if (
+1413                  observation is not None
+1414                  and robot_pose is not None
+1415                  and observation.stamp_seconds not in stamps
+1416              ):
+1417                  stamps.add(observation.stamp_seconds)
+1418                  poses.append(
+1419                      transform_pose(
+1420                          robot_pose,
+1421                          Pose2D(
+1422                              observation.x,
+1423                              observation.y,
+1424                              observation.normal_yaw,
+1425                          ),
+1426                      )
+1427                  )
+1428                  if len(poses) &gt;= self.anchor_samples:
+1429                      break
+1430              time.sleep(period)
+1431  
+1432          if not poses:
+1433              return None
+1434          return self._average_poses(poses)</pre></details></article><article class="finding" data-priority="P1" id="D05"><div class="eyebrow"><span class="badge P1">P1</span> D05 · Confirmed code behavior</div><h3>Fresh message arrival does not establish valid sensor data</h3><p>Scan and odometry freshness use reception time rather than source stamp. Empty or wholly invalid scans yield infinite clearance because the helpers only reduce minima for valid ranges. A continually republished old scan or malformed scan can therefore satisfy freshness while offering no obstacle evidence. Tag timestamps are checked separately, which is a useful existing safeguard.</p><p><strong>Improve:</strong> Validate source timestamps, frame IDs, finite geometry, monotonic progress and required sector coverage. Distinguish valid no-return measurements from invalid/empty data according to the actual LiDAR contract. Stop on invalid coverage and on stale upstream encoder data even when downstream odometry continues publishing.</p><p><strong>Acceptance:</strong> Replay old-stamped messages at full rate, empty scans, all-NaN scans, partial sector loss and wrong frames. Reject stale or invalid data without treating legitimate clear-space returns as faults.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:463-512</p><pre> 463      def _odom_callback(self, message):
+ 464          position = message.pose.pose.position
+ 465          orientation = message.pose.pose.orientation
+ 466          yaw = math.atan2(
+ 467              2.0 * (
+ 468                  orientation.w * orientation.z
+ 469                  + orientation.x * orientation.y
+ 470              ),
+ 471              1.0 - 2.0 * (
+ 472                  orientation.y * orientation.y
+ 473                  + orientation.z * orientation.z
+ 474              ),
+ 475          )
+ 476          pose = Pose2D(float(position.x), float(position.y), float(yaw))
+ 477          if not all(math.isfinite(value) for value in (pose.x, pose.y, pose.yaw)):
+ 478              self.get_logger().warning(
+ 479                  &#x27;Ignoring non-finite odometry pose&#x27;,
+ 480                  throttle_duration_sec=2.0,
+ 481              )
+ 482              return
+ 483          with self._odom_lock:
+ 484              self._odom_pose = pose
+ 485              self._odom_frame_id = message.header.frame_id or &#x27;odom&#x27;
+ 486          self._last_odom_received_ns = self.get_clock().now().nanoseconds
+ 487          self._visualization_call(
+ 488              &#x27;append_pose&#x27;,
+ 489              pose,
+ 490              self._odom_frame_id,
+ 491          )
+ 492  
+ 493      def _scan_callback(self, message):
+ 494          self._front_clearance, self._rear_clearance = scan_sector_clearances(
+ 495              message.ranges,
+ 496              message.angle_min,
+ 497              message.angle_increment,
+ 498              message.range_min,
+ 499              message.range_max,
+ 500              self.scan_forward_angle,
+ 501              self.front_sector_half_angle,
+ 502              self.rear_sector_half_angle,
+ 503          )
+ 504          with self._scan_lock:
+ 505              self._scan = (
+ 506                  tuple(message.ranges),
+ 507                  float(message.angle_min),
+ 508                  float(message.angle_increment),
+ 509                  float(message.range_min),
+ 510                  float(message.range_max),
+ 511              )
+ 512          self._last_scan_received_ns = self.get_clock().now().nanoseconds</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1559-1572</p><pre>1559      def _sensor_safety_reason(self, require_scan=True):
+1560          now = self.get_clock().now().nanoseconds
+1561          timeout_ns = int(self.sensor_timeout * 1e9)
+1562          if self.require_fresh_odometry and (
+1563              self._last_odom_received_ns is None
+1564              or now - self._last_odom_received_ns &gt; timeout_ns
+1565          ):
+1566              return &#x27;Odometry is missing or stale&#x27;
+1567          if require_scan and self.require_fresh_scan and (
+1568              self._last_scan_received_ns is None
+1569              or now - self._last_scan_received_ns &gt; timeout_ns
+1570          ):
+1571              return &#x27;Laser scan is missing or stale&#x27;
+1572          return None</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_geometry.py:231-290</p><pre> 231      return max(-max_angular_speed, min(max_angular_speed, angular))
+ 232  
+ 233  
+ 234  def scan_sector_clearances(
+ 235      ranges,
+ 236      angle_min: float,
+ 237      angle_increment: float,
+ 238      range_min: float,
+ 239      range_max: float,
+ 240      forward_angle: float,
+ 241      front_half_angle: float,
+ 242      rear_half_angle: float,
+ 243  ):
+ 244      &quot;&quot;&quot;Return minimum valid ranges in robot-front and robot-rear sectors.&quot;&quot;&quot;
+ 245  
+ 246      front = math.inf
+ 247      rear = math.inf
+ 248      angle = angle_min
+ 249      for value in ranges:
+ 250          if math.isfinite(value) and range_min &lt;= value &lt;= range_max:
+ 251              front_error = normalize_angle(angle - forward_angle)
+ 252              rear_error = normalize_angle(angle - forward_angle - math.pi)
+ 253              if abs(front_error) &lt;= front_half_angle:
+ 254                  front = min(front, value)
+ 255              if abs(rear_error) &lt;= rear_half_angle:
+ 256                  rear = min(rear, value)
+ 257          angle += angle_increment
+ 258      return front, rear
+ 259  
+ 260  
+ 261  def minimum_range_excluding_sector(
+ 262      ranges,
+ 263      angle_min: float,
+ 264      angle_increment: float,
+ 265      range_min: float,
+ 266      range_max: float,
+ 267      forward_angle: float,
+ 268      exclude_bearing: float,
+ 269      exclude_half_angle: float,
+ 270  ):
+ 271      &quot;&quot;&quot;Return the closest valid return, ignoring one robot-frame sector.
+ 272  
+ 273      Rotating in place sweeps the whole footprint, so the relevant clearance is
+ 274      the minimum over the whole scan. The dock the robot is deliberately parked in
+ 275      front of would dominate that minimum, so its bearing is excluded.
+ 276      &quot;&quot;&quot;
+ 277  
+ 278      closest = math.inf
+ 279      angle = angle_min
+ 280      for value in ranges:
+ 281          if math.isfinite(value) and range_min &lt;= value &lt;= range_max:
+ 282              bearing = normalize_angle(angle - forward_angle)
+ 283              if (
+ 284                  exclude_half_angle &lt;= 0.0
+ 285                  or abs(normalize_angle(bearing - exclude_bearing))
+ 286                  &gt; exclude_half_angle
+ 287              ):
+ 288                  closest = min(closest, float(value))
+ 289          angle += angle_increment
+ 290      return closest</pre></details></article><article class="finding" data-priority="P1" id="D06"><div class="eyebrow"><span class="badge P1">P1</span> D06 · Confirmed wiring; resulting pose bias needs measurement</div><h3>Raw CSI images feed the rectified-image detector input</h3><p>The camera publishes captured BGR frames without rectification; launch maps detector image_rect to /camera/image_raw. Calibration has nonzero distortion and different K and P matrices. Upstream AprilTag ROS documents rectified input and use of P. This is a concrete input-contract concern; the exact installed 3.4.0 detector implementation was not inspected from source.</p><p><strong>Improve:</strong> Provide a calibrated rectified image stream and matching CameraInfo, then verify the installed detector contract. Measure physical tag edge size, camera extrinsics, exposure/capture latency and pose error across the image. Use acquisition timestamps where supported.</p><p><strong>Acceptance:</strong> Compare known tag positions and headings at center and edges, under expected lighting and motion. Meet the docking error budget over the full working range, not just one frontal pose.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/csi_camera/csi_camera/camera_node.py:216-252</p><pre> 216      def publish_frame(self) -&gt; None:
+ 217          success, frame = self.capture.read()
+ 218  
+ 219          if not success:
+ 220              self.get_logger().error(
+ 221                  &quot;Failed to capture a frame.&quot;,
+ 222                  throttle_duration_sec=2.0,
+ 223              )
+ 224              return
+ 225  
+ 226          frame_height, frame_width = frame.shape[:2]
+ 227          if (frame_width, frame_height) != (
+ 228              self.expected_width,
+ 229              self.expected_height,
+ 230          ):
+ 231              self.get_logger().error(
+ 232                  f&quot;Captured {frame_width}x{frame_height}, expected &quot;
+ 233                  f&quot;{self.expected_width}x{self.expected_height}; dropping &quot;
+ 234                  &quot;frame because its calibration would be invalid.&quot;,
+ 235                  throttle_duration_sec=2.0,
+ 236              )
+ 237              return
+ 238  
+ 239          message = self.bridge.cv2_to_imgmsg(
+ 240              frame,
+ 241              encoding=&quot;bgr8&quot;,
+ 242          )
+ 243  
+ 244          message.header.stamp = self.get_clock().now().to_msg()
+ 245          message.header.frame_id = self.frame_id
+ 246  
+ 247          camera_info = deepcopy(self.camera_info)
+ 248          camera_info.header = message.header
+ 249  
+ 250          self.camera_info_publisher.publish(camera_info)
+ 251          self.publisher.publish(message)
+ 252  </pre><p class="ref">src/csi_camera/config/camera.yaml:1-27</p><pre>   1  image_width: 640
+   2  image_height: 480
+   3  camera_name: narrow_stereo
+   4  camera_matrix:
+   5    rows: 3
+   6    cols: 3
+   7    data: [369.30101,   0.     , 308.15763,
+   8             0.     , 493.19573, 230.23338,
+   9             0.     ,   0.     ,   1.     ]
+  10  distortion_model: plumb_bob
+  11  distortion_coefficients:
+  12    rows: 1
+  13    cols: 5
+  14    data: [-0.055708, 0.044023, -0.000815, 0.001158, 0.000000]
+  15  rectification_matrix:
+  16    rows: 3
+  17    cols: 3
+  18    data: [1., 0., 0.,
+  19           0., 1., 0.,
+  20           0., 0., 1.]
+  21  projection_matrix:
+  22    rows: 3
+  23    cols: 4
+  24    data: [364.71048,   0.     , 309.23694,   0.     ,
+  25             0.     , 488.42682, 229.32127,   0.     ,
+  26             0.     ,   0.     ,   1.     ,   0.     ]</pre><p class="ref">src/my_robot_docking/launch/docking.launch.py:95-110</p><pre>  95              name=&#x27;velocity_arbiter&#x27;,
+  96              output=&#x27;screen&#x27;,
+  97              parameters=[
+  98                  server_config,
+  99                  {&#x27;use_sim_time&#x27;: use_sim_time},
+ 100              ],
+ 101          ),
+ 102          Node(
+ 103              package=&#x27;my_robot_docking&#x27;,
+ 104              executable=&#x27;docking_server&#x27;,
+ 105              name=&#x27;docking_server&#x27;,
+ 106              output=&#x27;screen&#x27;,
+ 107              parameters=[
+ 108                  server_config,
+ 109                  {
+ 110                      &#x27;use_sim_time&#x27;: use_sim_time,</pre></details></article><article class="finding" data-priority="P1" id="D07"><div class="eyebrow"><span class="badge P1">P1</span> D07 · Confirmed design limitation</div><h3>Reverse docking can succeed using only a frozen visual anchor</h3><p>Reverse travel intentionally loses the front-facing tag. The controller then uses odometry and a latched goal; max_reverse_distance is 0.80 m. Verification checks pose error, without contact sensing or an anchor uncertainty limit. Wheel slip can leave an apparently valid odometric endpoint physically misaligned. Forward entry/align phases also permit temporary non-visual movement.</p><p><strong>Improve:</strong> Use rear perception or independent mechanical/contact verification for precision reverse docking. Set travel and time limits from measured odometry uncertainty, not only a generic distance cap. Abort on uncertainty or traction faults and reacquire before retry.</p><p><strong>Acceptance:</strong> Introduce controlled wheel slip and offset starts during reverse approach. The robot must either prove contact/alignment independently or report failure; it must not declare success solely from integrated wheel motion.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/approach_controller.py:148-160</p><pre> 148      @property
+ 149      def requires_tag(self) -&gt; bool:
+ 150          &quot;&quot;&quot;Whether losing the tag now should be treated as a failure.
+ 151  
+ 152          Entry legs run on odometry by design: the camera looks forward with a
+ 153          limited field of view, so turning toward the corridor entry point
+ 154          necessarily swings the tag out of frame. Backing in loses the tag for
+ 155          the same reason.
+ 156          &quot;&quot;&quot;
+ 157  
+ 158          if self._state == ApproachState.RUN:
+ 159              return not self.reverse
+ 160          return False</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1326-1369</p><pre>1326                  reverse_travelled += math.hypot(
+1327                      robot_pose.x - previous_pose.x,
+1328                      robot_pose.y - previous_pose.y,
+1329                  )
+1330                  if reverse_travelled &gt; self.max_reverse_distance:
+1331                      self._stop_robot()
+1332                      return (
+1333                          ApproachOutcome.CONTROL_FAILED,
+1334                          &#x27;Maximum reverse travel distance exceeded&#x27;,
+1335                      )
+1336              previous_pose = robot_pose
+1337  
+1338              if update.overshot:
+1339                  self._stop_robot()
+1340                  return (
+1341                      ApproachOutcome.CONTROL_FAILED,
+1342                      f&#x27;Robot passed the configured {target_name}&#x27;,
+1343                  )
+1344  
+1345              if update.stuck:
+1346                  self._stop_robot()
+1347                  return (
+1348                      ApproachOutcome.CONTROL_FAILED,
+1349                      &#x27;Corridor replans exhausted without converging&#x27;,
+1350                  )
+1351  
+1352              if update.reached:
+1353                  self._stop_robot()
+1354                  if verification_started is None:
+1355                      verification_started = time.monotonic()
+1356                  self._publish_feedback(
+1357                      goal_handle,
+1358                      Dock.Feedback.VERIFYING,
+1359                      error.along,
+1360                      error.cross,
+1361                      error.yaw,
+1362                      retries,
+1363                  )
+1364                  if (
+1365                      time.monotonic() - verification_started
+1366                      &gt;= self.verification_duration
+1367                  ):
+1368                      return ApproachOutcome.SUCCEEDED, success_message
+1369              else:</pre><p class="ref">src/my_robot_docking/config/docking_config.yaml:130-137</p><pre> 130    ros__parameters:
+ 131      use_sim_time: true
+ 132      nav_input_topic: /cmd_vel
+ 133      dock_input_topic: /cmd_vel_dock
+ 134      output_topic: /cmd_vel_out
+ 135      nav_timeout: 0.50
+ 136      dock_timeout: 0.25
+ 137      publish_rate: 50.0</pre></details></article><article class="finding" data-priority="P1" id="D08"><div class="eyebrow"><span class="badge P1">P1</span> D08 · Confirmed asynchronous handling gap</div><h3>Late navigation goal acceptance can escape cancellation</h3><p>The initial send_goal_async wait has a five-second timeout. If it times out or docking is canceled before acceptance, no accepted Nav2 handle exists to cancel, and no late-result cleanup is registered. A later accepted goal can execute after docking has returned. Existing cancellation after a handle is stored sends cancellation but does not always wait for acknowledged terminal state.</p><p><strong>Improve:</strong> Track pending and accepted goals through a single ownership state machine. Attach late-acceptance cleanup, cancel late handles, and wait for terminal acknowledgment while holding motion inhibited. Cover exception and shutdown paths.</p><p><strong>Acceptance:</strong> Delay NavigateToPose acceptance beyond five seconds and cancel before acceptance. Any subsequently accepted goal must be canceled, and base output must remain stopped.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:836-858</p><pre> 836  
+ 837          send_future = self.nav_client.send_goal_async(
+ 838              nav_goal,
+ 839              feedback_callback=self._navigation_feedback,
+ 840          )
+ 841          if not self._wait_for_future(send_future, dock_goal, 5.0):
+ 842              return (
+ 843                  NavigationOutcome.CANCELLED
+ 844                  if dock_goal.is_cancel_requested
+ 845                  else NavigationOutcome.FAILED
+ 846              )
+ 847  
+ 848          nav_handle = send_future.result()
+ 849          if nav_handle is None or not nav_handle.accepted:
+ 850              return NavigationOutcome.FAILED
+ 851  
+ 852          self._active_nav_goal = nav_handle
+ 853          result_future = nav_handle.get_result_async()
+ 854          if not self._wait_for_future(
+ 855              result_future,
+ 856              dock_goal,
+ 857              self.navigation_timeout,
+ 858              cancel_nav=True,</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:879-894</p><pre> 879      def _wait_for_future(self, future, dock_goal, timeout, cancel_nav=False):
+ 880          completed = threading.Event()
+ 881          future.add_done_callback(lambda _future: completed.set())
+ 882          deadline = time.monotonic() + timeout
+ 883          while rclpy.ok() and not future.done():
+ 884              if dock_goal.is_cancel_requested:
+ 885                  if cancel_nav and self._active_nav_goal is not None:
+ 886                      self._active_nav_goal.cancel_goal_async()
+ 887                  return False
+ 888              remaining = deadline - time.monotonic()
+ 889              if remaining &lt;= 0.0:
+ 890                  if cancel_nav and self._active_nav_goal is not None:
+ 891                      self._active_nav_goal.cancel_goal_async()
+ 892                  return False
+ 893              completed.wait(timeout=min(remaining, 0.05))
+ 894          return future.done()</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:789-794</p><pre> 789          finally:
+ 790              self._stop_robot()
+ 791              with self._goal_lock:
+ 792                  self._busy = False
+ 793              self._active_dock_goal = None
+ 794              self._active_nav_goal = None</pre></details></article><article class="finding" data-priority="P1" id="N02"><div class="eyebrow"><span class="badge P1">P1</span> N02 · Confirmed standalone launch/config mismatch</div><h3>Hardware mapping launch has no odom-to-base TF authority</h3><p>robot-slam.py loads the shared controller configuration, which disables odometry TF, and does not launch an EKF. SLAM needs the odom-to-base transform; remapping an odometry topic does not supply it. The same launch silently selects mock hardware if the serial port is unavailable. Another externally launched TF publisher could mask this issue, but is not declared here.</p><p><strong>Improve:</strong> Create one explicit hardware base bringup used by mapping and navigation. Select one odometry TF publisher for each mode; fail clearly if hardware is unavailable and require an explicit simulation/mock selection. Make mapping/localization mode transitions mutually exclusive.</p><p><strong>Acceptance:</strong> From a clean process environment, mapping must produce map → odom → base_footprint → sensors and reject missing hardware. Saving and reopening a map must not depend on unrelated launches.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_bringup/launch/robot-slam.py:12-35</p><pre>  12      return os.path.exists(path) and os.access(path, os.R_OK | os.W_OK)
+  13  
+  14  def generate_launch_description():
+  15      port = &quot;/dev/ttyACM0&quot;
+  16      use_mock = not serial_available(port)
+  17  
+  18      robot_description_path = get_package_share_path(&#x27;my_robot_description&#x27;)
+  19      robot_bringup_path = get_package_share_path(&#x27;my_robot_bringup&#x27;)
+  20  
+  21      urdf_path = os.path.join(robot_description_path, &#x27;urdf&#x27;, &#x27;my_robot.urdf.xacro&#x27;)
+  22      rviz_config_path = os.path.join(robot_description_path, &#x27;rviz&#x27;, &#x27;lidar_config.rviz&#x27;)
+  23      controller_path = os.path.join(robot_bringup_path, &#x27;config&#x27;, &#x27;my_robot_controller.yaml&#x27;)
+  24      slam_toolbox_path = os.path.join(robot_bringup_path, &#x27;config&#x27;, &#x27;slam_toolbox.yaml&#x27;)
+  25  
+  26      robot_description = ParameterValue(Command([&#x27;xacro &#x27;, urdf_path,&#x27; &#x27;,
+  27                                                  &#x27;use_mock_hardware:=&#x27;, &#x27;true&#x27; if use_mock else &#x27;false&#x27;, &#x27; &#x27;,
+  28                                                  &#x27;serial_port:=&#x27;, port,&#x27; &#x27;,
+  29                                                  &#x27;baud:=&#x27;,&#x27;115200&#x27;]), value_type=str)
+  30      
+  31      lidar_launch = IncludeLaunchDescription(
+  32          PythonLaunchDescriptionSource(
+  33              os.path.join(robot_bringup_path, &#x27;launch&#x27;, &#x27;peripherals&#x27; , &#x27;lidar.launch.py&#x27;)
+  34          )
+  35      )</pre><p class="ref">src/my_robot_bringup/launch/robot-slam.py:91-118</p><pre></pre><p class="ref">src/my_robot_bringup/config/my_robot_controller.yaml:18-27</p><pre>  18      odom_frame_id: &quot;odom&quot;
+  19      base_frame_id: &quot;base_footprint&quot;
+  20  
+  21      pose_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
+  22      twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.01]
+  23  
+  24      #enable_odom_tf: true for raw odom, false for filtered odom
+  25      enable_odom_tf: false
+  26      publish_rate: 50.0 #should be double
+  27      use_stamped_vel: false</pre></details></article><article class="finding" data-priority="P1" id="N03"><div class="eyebrow"><span class="badge P1">P1</span> N03 · Confirmed configuration and failing test</div><h3>Post-smoothing collision validation is disabled</h3><p>The custom behavior tree explicitly sets SmoothPath check_for_collisions=false despite its collision-checked comment and the test expecting true. This removes the smoother server’s requested post-smoothing footprint validation; it does not mean all local-controller or smoother-internal obstacle checks are absent.</p><p><strong>Improve:</strong> Restore post-smoothing validation with the correct full footprint and frames, then test sharp corners and tight corridors. Align comments, tests and deployed behavior.</p><p><strong>Acceptance:</strong> A smoothed path intersecting the full robot footprint with an obstacle must be rejected before following. Keep the existing pipeline test and add geometry-based integration cases.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_navigation/behavior_trees/navigate_to_pose_fast_recovery.xml:1-18</p><pre>   1  &lt;!--
+   2    NavigateToPose with 2 Hz replanning, collision-checked path smoothing, and
+   3    a shorter recovery wait. Normal path tracking remains controlled by DWB.
+   4  --&gt;
+   5  &lt;root main_tree_to_execute=&quot;MainTree&quot;&gt;
+   6    &lt;BehaviorTree ID=&quot;MainTree&quot;&gt;
+   7      &lt;RecoveryNode number_of_retries=&quot;3&quot; name=&quot;NavigateRecovery&quot;&gt;
+   8        &lt;PipelineSequence name=&quot;NavigateWithReplanning&quot;&gt;
+   9          &lt;RateController hz=&quot;2.0&quot;&gt;
+  10            &lt;RecoveryNode number_of_retries=&quot;1&quot; name=&quot;ComputeAndSmoothPath&quot;&gt;
+  11              &lt;Sequence name=&quot;ComputeAndSmoothPathSequence&quot;&gt;
+  12                &lt;ComputePathToPose goal=&quot;{goal}&quot; path=&quot;{raw_path}&quot;
+  13                  planner_id=&quot;GridBased&quot;/&gt;
+  14                &lt;SmoothPath unsmoothed_path=&quot;{raw_path}&quot; smoothed_path=&quot;{path}&quot;
+  15                  smoother_id=&quot;simple_smoother&quot; max_smoothing_duration=&quot;0.10&quot;
+  16                  check_for_collisions=&quot;false&quot;/&gt;
+  17              &lt;/Sequence&gt;
+  18              &lt;ClearEntireCostmap name=&quot;ClearGlobalCostmap-Context&quot;</pre><p class="ref">src/my_robot_navigation/test/test_navigation_pipeline.py:34-50</p><pre>  34  def test_behavior_tree_smooths_navfn_path_at_two_hz():
+  35      root = ET.parse(BT_FILE).getroot()
+  36      rate = root.find(&#x27;.//RateController&#x27;)
+  37      compute = root.find(&#x27;.//ComputePathToPose&#x27;)
+  38      smooth = root.find(&#x27;.//SmoothPath&#x27;)
+  39      follow = root.find(&#x27;.//FollowPath&#x27;)
+  40  
+  41      assert rate is not None
+  42      assert compute is not None
+  43      assert smooth is not None
+  44      assert follow is not None
+  45      assert rate.attrib[&#x27;hz&#x27;] == &#x27;2.0&#x27;
+  46      assert compute.attrib[&#x27;path&#x27;] == &#x27;{raw_path}&#x27;
+  47      assert smooth.attrib[&#x27;unsmoothed_path&#x27;] == &#x27;{raw_path}&#x27;
+  48      assert smooth.attrib[&#x27;smoothed_path&#x27;] == &#x27;{path}&#x27;
+  49      assert smooth.attrib[&#x27;smoother_id&#x27;] == &#x27;simple_smoother&#x27;
+  50      assert smooth.attrib[&#x27;check_for_collisions&#x27;] == &#x27;true&#x27;</pre></details></article><article class="finding" data-priority="P1" id="N04"><div class="eyebrow"><span class="badge P1">P1</span> N04 · Confirmed launch/config behavior</div><h3>Startup and localization are not readiness-gated</h3><p>Bringup chains spawners using OnProcessExit without inspecting exit status, then starts Nav2 after a fixed two-second delay. AMCL is configured to initialize at map origin. There is no platform readiness gate combining controller health, TF, localization confidence, sensors and motion ownership. Starting away from origin needs a deliberate initialization procedure.</p><p><strong>Improve:</strong> Add a readiness supervisor and explicit operational modes. Gate goal acceptance on successful controller activation, fresh TF/sensors, validated map identity and localized pose. Provide operator-assisted or validated automatic relocalization after reboot or displacement.</p><p><strong>Acceptance:</strong> Fail spawners, delay EKF, start at a different map location and displace the stopped robot. No autonomous motion until readiness and localization are proven; recovery must expose a specific fault reason.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_navigation/launch/bringup.launch.py:129-135</p><pre> 129      start_diff_drive_after_joint_state_broadcaster = RegisterEventHandler(
+ 130          OnProcessExit(
+ 131              target_action=joint_state_broadcaster,
+ 132              on_exit=[diff_drive_spawner],
+ 133          )
+ 134      )
+ 135  </pre><p class="ref">src/my_robot_navigation/launch/bringup.launch.py:193-204</p><pre> 193      start_localization_after_diff_drive = RegisterEventHandler(
+ 194          OnProcessExit(
+ 195              target_action=diff_drive_spawner,
+ 196              on_exit=[
+ 197                  ekf_node,
+ 198                  TimerAction(
+ 199                      period=2.0,
+ 200                      actions=[nav2_bringup],
+ 201                  ),
+ 202              ],
+ 203          )
+ 204      )</pre><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:41-50</p><pre>  41      z_short: 0.05
+  42      #ENABLE initial pose if ekf publish map -&gt;odom
+  43      set_initial_pose: true
+  44      always_reset_initial_pose: false
+  45      first_map_only: false
+  46      initial_pose:
+  47        x: 0.0
+  48        y: 0.0
+  49        z: 0.0
+  50        yaw: 0.0</pre></details></article><article class="finding" data-priority="P2" id="N05"><div class="eyebrow"><span class="badge P2">P2</span> N05 · Confirmed configuration mismatch</div><h3>Planner, smoother and actuator speed envelopes disagree</h3><p>DWB requests up to 0.70 m/s and coverage RPP requests 0.50 m/s, while the navigation velocity smoother caps translation at 0.30 m/s. The intended base limit is 0.50 m/s but disabled (H01). Firmware sample max wheel rate is 20 rad/s versus hardware-plugin 40 rad/s. These values can distort trajectory prediction and tracking, especially in arcs; actual flashed firmware is unknown.</p><p><strong>Improve:</strong> Choose a measured operating envelope first, including loaded turning/braking limits. Harmonize controller prediction, smoothing, body and wheel limits. Preserve lower docking limits and verify the full command chain under saturation.</p><p><strong>Acceptance:</strong> Record requested, smoothed, arbitrated and measured velocities for straight travel, turns and coverage. Explain every saturation and meet tracking/stop criteria without increasing speed to hide mismatch.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:147-165</p><pre> 147        angular_dist_threshold: 0.35        # ~20°: forces a full rotate-in-place above this heading error
+ 148        forward_sampling_distance: 0.25     # how far along the path it looks to compute target heading
+ 149        rotate_to_heading_angular_vel: 2.0  # speed of the forced rotation
+ 150        max_angular_accel: 3.2
+ 151        simulate_ahead_time: 1.0
+ 152  
+ 153        xy_goal_tolerance: 0.1
+ 154        min_vel_x: 0.0
+ 155        max_vel_x: 0.7
+ 156        max_vel_y: 0.0
+ 157        max_vel_theta: 2.0
+ 158  
+ 159        min_speed_xy: 0.0
+ 160        max_speed_xy: 0.7
+ 161        min_speed_theta: 0.05
+ 162  
+ 163        acc_lim_x: 0.3
+ 164        acc_lim_y: 0.0
+ 165        acc_lim_theta: 3.2</pre><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:193-210</p><pre> 193  
+ 194      CoveragePath:
+ 195        plugin: nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController
+ 196        desired_linear_vel: 0.50
+ 197        lookahead_dist: 0.50
+ 198        min_lookahead_dist: 0.20
+ 199        max_lookahead_dist: 0.70
+ 200        lookahead_time: 0.8
+ 201        rotate_to_heading_angular_vel: 1.0
+ 202        transform_tolerance: 0.2
+ 203        use_velocity_scaled_lookahead_dist: true
+ 204        min_approach_linear_velocity: 0.05
+ 205        approach_velocity_scaling_dist: 0.30
+ 206        use_collision_detection: true
+ 207        max_allowed_time_to_collision_up_to_carrot: 0.60
+ 208        use_regulated_linear_velocity_scaling: true
+ 209        use_cost_regulated_linear_velocity_scaling: false
+ 210        regulated_linear_scaling_min_radius: 0.16</pre><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:363-378</p><pre> 363  velocity_smoother:
+ 364    ros__parameters:
+ 365      use_sim_time: false
+ 366      smoothing_frequency: 50.0
+ 367      scale_velocities: false
+ 368      feedback: OPEN_LOOP
+ 369  
+ 370      max_velocity: [0.3, 0.0, 2.0]
+ 371      min_velocity: [-0.3, 0.0, -2.0]
+ 372  
+ 373      max_accel: [2.0, 0.0, 4.0]
+ 374      max_decel: [-0.8, 0.0, -2.5]
+ 375      odom_topic: /odometry/filtered
+ 376      odom_duration: 0.1
+ 377      deadband_velocity: [0.0, 0.0, 0.0]
+ 378      velocity_timeout: 0.25</pre><p class="ref">src/my_robot_description/urdf/mobile_base.ros2_control.xacro:15-24</p><pre>  15                  &lt;!-- &lt;param name=&quot;invert_left&quot;&gt;true&lt;/param&gt;
+  16                  &lt;param name=&quot;invert_right&quot;&gt;true&lt;/param&gt; --&gt;
+  17                  &lt;param name=&quot;invert_left_cmd&quot;&gt;false&lt;/param&gt;
+  18                  &lt;param name=&quot;invert_right_cmd&quot;&gt;false&lt;/param&gt;
+  19                  &lt;param name=&quot;invert_left_enc&quot;&gt;false&lt;/param&gt;
+  20                  &lt;param name=&quot;invert_right_enc&quot;&gt;false&lt;/param&gt;
+  21                  &lt;param name=&quot;max_rad_s&quot;&gt;40.0&lt;/param&gt;
+  22              &lt;/hardware&gt;
+  23              &lt;/xacro:unless&gt;
+  24  </pre></details></article><article class="finding" data-priority="P2" id="H03"><div class="eyebrow"><span class="badge P2">P2</span> H03 · Confirmed driver behavior; impact requires replay</div><h3>IMU publication and covariance need stronger validity contracts</h3><p>OnSerialRX returns true after receiving bytes even if no complete supported measurement updated the state, so partial input can trigger a fresh timestamp on old data. FillCovarianceMatrices sets all nine entries to 0.1, implying fully correlated axes rather than measured uncertainty. Active config correctly disables the driver TF publisher; do not re-enable it alongside URDF/EKF.</p><p><strong>Improve:</strong> Publish only after a validated measurement update, preserve sample timing and track individual field age. Use calibrated covariance with justified cross-correlations and validate quaternion, units, axis signs and magnetic sensitivity before adjusting EKF weights.</p><p><strong>Acceptance:</strong> Feed partial and unsupported packets: no new valid IMU sample should be claimed. Validate covariance and stationary/rotation residuals against independent reference measurements.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/tm_imu/src/tm_imu_node.cpp:56-71</p><pre>  56  void TMSerial::TimerCallback()
+  57  {
+  58      // Read the values from the Imu sensor
+  59      bool res = OnSerialRX();
+  60      if (!res) return;
+  61      // Update the header stamp
+  62      imu_data_msg.header.stamp     = this-&gt;get_clock()-&gt;now();
+  63      imu_data_rpy_msg.header.stamp = this-&gt;get_clock()-&gt;now();
+  64      imu_data_mag_msg.header.stamp = this-&gt;get_clock()-&gt;now();
+  65      FillCovarianceMatrices();
+  66      // Publish msg
+  67      if (this-&gt;get_parameter(&quot;publish_tf&quot;).as_bool()) {
+  68          PublishTransform();
+  69      }
+  70      publisher_IMU-&gt;publish(imu_data_msg);
+  71      publisher_IMU_RPY-&gt;publish(imu_data_rpy_msg);</pre><p class="ref">src/tm_imu/src/tm_imu_node.cpp:105-124</p><pre> 105  {
+ 106      char serialBuffer[1024];
+ 107      int ret = serialib1-&gt;readBytes(serialBuffer, sizeof(serialBuffer),1,100);
+ 108      #ifdef DEBUG_MODE
+ 109      //RCLCPP_INFO(this-&gt;get_logger(), &quot;rxsize = %d&quot;,ret);
+ 110      count2 += ret;
+ 111      #endif
+ 112      if (ret &lt;= 0) return false;
+ 113                                                              // Step 1: read the received data buffer of the Serial Port
+ 114      char*  rxData = serialBuffer;                           //         and then convert it to data types acceptable by the
+ 115      int    rxSize = ret;                                    //         Communication Abstraction Layer (CAL).
+ 116      Ep_Header header;
+ 117      while(EP_SUCC_ == eP.On_RecvPkg(rxData, rxSize, &amp;header)){ // Step 2: Tell the CAL that new data has arrived.
+ 118                                                              //         It does not matter if the new data only contains a fraction
+ 119                                                              //         of a complete package, nor does it matter if the data is broken
+ 120                                                              //         during the transmission. On_RecvPkg() will only return EP_SUCC_
+ 121                                                              //         when a complete and correct package has arrived.
+ 122          rxData = 0;                                         //         The while loop ensures no package is omitted. 
+ 123      	rxSize = 0;
+ 124      	</pre><p class="ref">src/tm_imu/src/tm_imu_node.cpp:278-294</p><pre> 278          #ifdef DEBUG_MODE
+ 279          count++;
+ 280          #endif
+ 281      } // while()
+ 282      return true;
+ 283  }
+ 284  
+ 285      
+ 286  void TMSerial::FillCovarianceMatrices()
+ 287  {
+ 288      for(int i = 0; i &lt; 9; i++){
+ 289          imu_data_msg.orientation_covariance[i]        = 0.1;
+ 290          imu_data_msg.angular_velocity_covariance[i]   = 0.1;
+ 291          imu_data_msg.linear_acceleration_covariance[i]= 0.1;
+ 292          imu_data_rpy_msg.magnetic_field_covariance[i] = 0.1;
+ 293          imu_data_mag_msg.magnetic_field_covariance[i] = 0.1;
+ 294      }</pre></details></article><article class="finding" data-priority="P2" id="R01"><div class="eyebrow"><span class="badge P2">P2</span> R01 · Confirmed test failures and source drift</div><h3>Tests and documentation diverge from the current system</h3><p>The audit ran 128 selected existing tests: 125 passed and three navigation checks failed. Hardware and simulation both select A* while tests require Dijkstra; A* itself is not a defect. The third failure is N03. README describes separate predock/staging verification, but the current server runs one corridor approach after Nav2/search. Legacy navigation launches and apriltag_dock remain alternate command paths.</p><p><strong>Improve:</strong> Choose and document one supported launch per operating mode, reconcile intended planner behavior with tests, and mark legacy paths clearly. Add CI for the exact Humble dependency set, launch/TF/command contracts and fault injection. Review the pre-existing nav2_config.yaml edit before changing it.</p><p><strong>Acceptance:</strong> A clean checkout must pass deterministic tests and clean-launch integration tests with the same deployed configuration. Tests must check behavior and failure handling, not only preferred tuning constants.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_navigation/test/test_navigation_pipeline.py:21-50</p><pre>  21  
+  22  
+  23  @pytest.mark.parametrize(
+  24      &#x27;filename&#x27;,
+  25      (&#x27;nav2_config.yaml&#x27;, &#x27;sim_nav2_config.yaml&#x27;),
+  26  )
+  27  def test_navfn_remains_dijkstra(filename):
+  28      config = load_navigation_config(filename)
+  29      planner = config[&#x27;planner_server&#x27;][&#x27;ros__parameters&#x27;][&#x27;GridBased&#x27;]
+  30  
+  31      assert planner[&#x27;use_astar&#x27;] is False
+  32  
+  33  
+  34  def test_behavior_tree_smooths_navfn_path_at_two_hz():
+  35      root = ET.parse(BT_FILE).getroot()
+  36      rate = root.find(&#x27;.//RateController&#x27;)
+  37      compute = root.find(&#x27;.//ComputePathToPose&#x27;)
+  38      smooth = root.find(&#x27;.//SmoothPath&#x27;)
+  39      follow = root.find(&#x27;.//FollowPath&#x27;)
+  40  
+  41      assert rate is not None
+  42      assert compute is not None
+  43      assert smooth is not None
+  44      assert follow is not None
+  45      assert rate.attrib[&#x27;hz&#x27;] == &#x27;2.0&#x27;
+  46      assert compute.attrib[&#x27;path&#x27;] == &#x27;{raw_path}&#x27;
+  47      assert smooth.attrib[&#x27;unsmoothed_path&#x27;] == &#x27;{raw_path}&#x27;
+  48      assert smooth.attrib[&#x27;smoothed_path&#x27;] == &#x27;{path}&#x27;
+  49      assert smooth.attrib[&#x27;smoother_id&#x27;] == &#x27;simple_smoother&#x27;
+  50      assert smooth.attrib[&#x27;check_for_collisions&#x27;] == &#x27;true&#x27;</pre><p class="ref">src/my_robot_docking/my_robot_docking/docking_server.py:1153-1198</p><pre>1153      def _approach_tag(
+1154          self,
+1155          goal_handle,
+1156          dock,
+1157          final_distance,
+1158          lateral_offset,
+1159          yaw_offset,
+1160          retries,
+1161      ):
+1162          &quot;&quot;&quot;Run one corridor approach to the dock&#x27;s final pose.
+1163  
+1164          The observation that ended the search is not reused: the approach
+1165          re-samples the tag so the axis it plans from is an average rather than
+1166          whichever single frame happened to break the search loop.
+1167          &quot;&quot;&quot;
+1168  
+1169          # Backing in enters the corridor at the staging distance so the blind
+1170          # rear-first leg stays short; driving in enters at the predocking
+1171          # distance, which leaves room to swing onto the axis.
+1172          entry_distance = (
+1173              dock.staging_distance
+1174              if dock.reverse_docking
+1175              else dock.predocking_distance
+1176          )
+1177          self._visualization_call(
+1178              &#x27;set_stage&#x27;,
+1179              DockingStage.REVERSE_FINAL
+1180              if dock.reverse_docking
+1181              else DockingStage.FINAL_APPROACH,
+1182          )
+1183          return self._run_corridor_approach(
+1184              goal_handle,
+1185              dock,
+1186              final_distance,
+1187              entry_distance,
+1188              lateral_offset,
+1189              yaw_offset,
+1190              retries,
+1191              reverse=dock.reverse_docking,
+1192              success_message=(
+1193                  &#x27;Reverse dock pose verified&#x27;
+1194                  if dock.reverse_docking
+1195                  else &#x27;Dock pose verified&#x27;
+1196              ),
+1197              target_name=&#x27;final docking pose&#x27;,
+1198          )</pre><p class="ref">src/apriltag_dock/apriltag_dock/dock_controller_node.py:57-66</p><pre>  57          self.tf_buffer = tf2_ros.Buffer()
+  58          self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+  59  
+  60          # ── Publishers ──────────────────────────────────────────────────
+  61          self.cmd_vel_pub = self.create_publisher(Twist, &#x27;/cmd_vel&#x27;, 10)
+  62          self.status_pub = self.create_publisher(String, &#x27;/dock/status&#x27;, 10)
+  63  
+  64          # ── Services ────────────────────────────────────────────────────
+  65          self.create_service(Trigger, &#x27;/dock/start&#x27;, self._start_cb)
+  66          self.create_service(Trigger, &#x27;/dock/cancel&#x27;, self._cancel_cb)</pre></details></article><article class="finding" data-priority="P1" id="R02"><div class="eyebrow"><span class="badge P1">P1</span> R02 · Feature gap within audited scope</div><h3>Autonomous transport needs a persistent mission layer</h3><p>Nav2 supplies point goals and waypoint following; the coverage executor has entry/follow actions, cancellation, status and a progress watchdog. These are useful primitives. No general durable transport mission manager connecting stations, battery reserve, docking/charging and package handoff was found. waypoint_follower stop_on_failure=false permits continuation past failed waypoints, unsuitable as an implicit delivery-success policy.</p><p><strong>Improve:</strong> Develop persistent mission IDs, station goals, pause/resume/cancel, explicit completion criteria, bounded retries and recovery after process/power loss. Add energy-aware admission, return-to-charge, dock occupancy, operator intervention and an event history. Later integrate lift/drop as transactional mission steps.</p><p><strong>Acceptance:</strong> Reboot between every mission stage, block a station and fail a waypoint. Preserve mission identity and package state; never report delivery solely because a later waypoint succeeded.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/coverage_planner/test_coverage/executor_node.py:486-527</p><pre> 486      def _cancel(self, _request, response):
+ 487          if self._goal_handle is None:
+ 488              response.success = False
+ 489              response.message = &quot;No active Nav2 goal&quot;
+ 490              return response
+ 491          self._set_state(ExecutionState.CANCELING, &quot;Cancel requested&quot;)
+ 492          future = self._goal_handle.cancel_goal_async()
+ 493          future.add_done_callback(lambda _: self.get_logger().info(&quot;Cancel sent&quot;))
+ 494          response.success = True
+ 495          response.message = &quot;Cancel requested&quot;
+ 496          return response
+ 497  
+ 498      def _status(self, _request, response):
+ 499          response.success = True
+ 500          response.message = self._state.value
+ 501          return response
+ 502  
+ 503      def _watchdog(self) -&gt; None:
+ 504          if self._state not in {ExecutionState.ENTERING, ExecutionState.FOLLOWING}:
+ 505              return
+ 506          timeout = float(self.get_parameter(&quot;progress_timeout_s&quot;).value)
+ 507          if timeout &lt;= 0.0 or time.monotonic() - self._last_progress_time &lt;= timeout:
+ 508              return
+ 509          self.get_logger().error(&quot;Coverage progress watchdog expired&quot;)
+ 510          if self._goal_handle is not None:
+ 511              self._goal_handle.cancel_goal_async()
+ 512          self._set_state(ExecutionState.ERROR, &quot;Progress watchdog expired&quot;)
+ 513  
+ 514      def _set_state(self, state: ExecutionState, detail: str) -&gt; None:
+ 515          self._state = state
+ 516          self._last_progress_time = time.monotonic()
+ 517          self.get_logger().info(f&quot;{state.value}: {detail}&quot;)
+ 518          self._publish_state(detail)
+ 519  
+ 520      def _publish_state(self, detail: str) -&gt; None:
+ 521          message = String()
+ 522          message.data = json.dumps(
+ 523              {&quot;state&quot;: self._state.value, &quot;detail&quot;: detail},
+ 524              separators=(&quot;,&quot;, &quot;:&quot;),
+ 525          )
+ 526          self._status_publisher.publish(message)
+ 527  </pre><p class="ref">src/my_robot_navigation/config/nav2_config.yaml:352-361</p><pre> 352  waypoint_follower:
+ 353    ros__parameters:
+ 354      use_sim_time: false
+ 355      loop_rate: 20
+ 356      stop_on_failure: false
+ 357      waypoint_task_executor_plugin: wait_at_waypoint
+ 358      wait_at_waypoint:
+ 359        plugin: nav2_waypoint_follower::WaitAtWaypoint
+ 360        enabled: false
+ 361        waypoint_pause_duration: 0</pre></details></article><article class="finding" data-priority="P1" id="R03"><div class="eyebrow"><span class="badge P1">P1</span> R03 · Scope-limited assurance gap</div><h3>No demonstrated platform-wide protective stop or release evidence</h3><p>The inspected command chain has navigation costmaps, docking scan checks and software/firmware timeouts. No integrated emergency-stop/bumper/drive-enable feedback chain or independently validated protective stopping mechanism was found in the audited workspace. Hardware circuitry, safety controller configuration and operating-site evidence were not supplied, so their absence on the actual robot cannot be inferred.</p><p><strong>Improve:</strong> Define the operating domain, payload/speed/floor constraints and failure responses with the hardware team. Establish independent protective stopping and manual reset behavior appropriate to the platform, plus diagnostics for sensor, controller, communication and actuator faults. Validate braking and power-loss behavior before unattended trials.</p><p><strong>Acceptance:</strong> Produce a reviewed safety architecture and measured fault/stop results for the assembled robot. Include payload, slopes if supported, traction extremes, sensor occlusion, host freeze and drive faults. Software tests alone do not establish industrial readiness.</p><details><summary>Source evidence · embedded excerpts</summary><p class="ref">src/my_robot_docking/my_robot_docking/velocity_arbiter.py:74-96</p><pre>  74          with self._lock:
+  75              dock_fresh = (
+  76                  self._dock_stamp is not None
+  77                  and (now - self._dock_stamp).nanoseconds / 1e9
+  78                  &lt;= self._dock_timeout
+  79              )
+  80              nav_fresh = (
+  81                  self._nav_stamp is not None
+  82                  and (now - self._nav_stamp).nanoseconds / 1e9
+  83                  &lt;= self._nav_timeout
+  84              )
+  85  
+  86              if dock_fresh:
+  87                  command = self._copy_twist(self._dock_command)
+  88              elif nav_fresh:
+  89                  command = self._copy_twist(self._nav_command)
+  90              else:
+  91                  command = Twist()
+  92  
+  93          self._publisher.publish(command)
+  94  
+  95  
+  96  def main(args=None):</pre><p class="ref">control/control.ino:246-254</p><pre> 246    // 2) Safety timeout: stop if commands stop arriving
+ 247    if (millis() - last_cmd_ms &gt; CMD_TIMEOUT_MS) {
+ 248      cmd_wl = 0.0;
+ 249      cmd_wr = 0.0;
+ 250    }
+ 251  
+ 252    // 3) Control/update at ~100 Hz (every 10 ms)
+ 253    const uint32_t now = millis();
+ 254    if (now - last_vel_ms &gt;= 10) {</pre><p class="ref">src/my_robot_docking/launch/docking.launch.py:114-143</p><pre> 114          ),
+ 115      ])</pre></details></article></section>
+<section id="roadmap"><h2>Development roadmap</h2><p>Use evidence-based exit gates rather than calendar estimates. Staffing, the charger/BMS choice, payload geometry and physical performance were not provided, so effort estimates would be premature.</p><article class="phase"><h3>Gate 0 · Establish a protected, deterministic base</h3><p class="muted">P0 findings D01/D02/N01/H01/H02 plus R03</p><p>Motion ownership; valid sensing; measured footprint; enabled limits; telemetry fault-stop; hardware protective stop contract.</p><p><strong>Exit criterion:</strong> Do not advance to unattended trials until every injected loss of authority, sensing or communication produces the validated safe response.</p></article><article class="phase"><h3>Gate 1 · Reliable navigation and mapping</h3><p class="muted">N02/N03/N04/N05, H03 and R01</p><p>One supported bringup, readiness supervisor, localization recovery, map save/load/versioning, consistent control limits and green CI.</p><p><strong>Exit criterion:</strong> Point-to-point and mapping acceptance matrix passes across allowed starts, obstacles, payloads and restarts.</p></article><article class="phase"><h3>Gate 2 · Verified docking and charging</h3><p class="muted">D03–D08; depends on Gate 0 and stable odometry</p><p>Time-aligned perception; contact-confirmed dock; BMS/charger integration; bounded reseating; undocking and charging inhibit.</p><p><strong>Exit criterion:</strong> Reach and leave the real dock repeatedly; never claim charge success with missing electrical evidence; faults remain stopped.</p></article><article class="phase"><h3>Gate 3 · Autonomous transport operation</h3><p class="muted">R02; depends on Gates 1–2</p><p>Durable job manager, station/map registry, low-energy return, operator UI/status, event history and supervised resume.</p><p><strong>Exit criterion:</strong> A full-shift mission trial plus reboot/fault scenarios preserves jobs and package state and reports every unresolved fault.</p></article><article class="phase"><h3>Gate 4 · Lift/drop and package deposit</h3><p class="muted">Requires stable station approach and mission transactions</p><p>Add action-based actuator control, homing, upper/lower limits, overload/jam detection, package presence and release confirmation.</p><p><strong>Exit criterion:</strong> Test empty pickup, jam, overload, power loss mid-lift and failed release. Navigation must obey lift/load interlocks; deposit succeeds only on sensor-confirmed transfer.</p></article><div class="panel"><h3>Design the lift/drop contract now; implement after the base is stable</h3><p>Reserve actions for home, lift and lower, with progress, cancellation and typed faults. Define upper/lower limits, position, actuator current, package presence and load state. Agree what “safe to drive” means at each lift position, including braking and power loss. Couple speed and footprint to payload state.</p><p>Deposit should be a transaction: arrive at the correct station → verify station ready and robot stopped → lower/release → confirm package transfer → confirm lift clear → retreat → complete the job. A timeout or commanded actuator movement is not proof of transfer. A later PLC or station interface can provide the external handshake.</p><h3>Operational features needed alongside missions</h3><p>Add a station registry tied to map identity/version, restricted and speed zones, durable mission events, health/status UI, actionable fault codes, log/rosbag capture around faults, configuration provenance, pinned dependencies, deployment rollback and boot supervision. Namespacing and access control should prevent unintended command publishers as the platform grows. Fleet scheduling can follow once single-robot mission recovery is reliable.</p></div></section>
+<section id="validation"><h2>Validation performed and proposed release gates</h2><div class="panel"><h3>Executed during this audit</h3><p><strong>125 passed, 3 failed in 0.92 s.</strong> Selected existing docking, navigation pipeline, camera calibration and active coverage tests ran without bytecode or pytest cache writes to the workspace. No new repository tests were added. The three failures were both A*/Dijkstra assertions and the smoothing collision-check assertion. All remaining selected tests passed.</p><p>Initial collection attempts encountered an installed/source coverage import mismatch, then docking tests’ sibling imports. Explicit source/test paths and disabled plugin autoload resolved collection. This was a direct pytest run using available ROS/generated dependencies, not a clean colcon build or ROS launch integration test.</p><details><summary>Reproduce the final selected test run</summary><pre>cd /home/tom/SensQ/ros2_ws
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="$PWD/src/my_robot_docking:$PWD/src/my_robot_docking/test:$PWD/src/csi_camera:$PWD/src/coverage_planner:$PYTHONPATH" python3 -m pytest -q -p no:cacheprovider --import-mode=importlib src/my_robot_docking/test src/my_robot_navigation/test src/csi_camera/test/test_camera_info.py src/coverage_planner/test --ignore=src/coverage_planner/test/test_flake8.py --basetemp=/tmp/amr-audit-pytest</pre></details><p>Existing tests exercise geometry, controller convergence, retries, safety helpers, database behavior and feedback/future handling. Passing helper tests does not demonstrate command arbitration under concurrent ROS actions, sensor failure response, contact success or real braking. Some passing tests explicitly encode the unsafe broad contact-band exemption.</p></div><div class="table"><table><thead><tr><th>Release evidence</th><th>Scenario matrix</th><th>Pass condition / metric</th></tr></thead><tbody>
+<tr><td>Protective stopping</td><td>Host freeze, command loss, encoder loss, stale/invalid scan, obstacle at dock, bumper/E-stop and power loss; empty/loaded robot.</td><td>No uncontrolled resumption. Measure end-to-end stop latency and distance against the hardware team’s allocated protective envelope.</td></tr>
+<tr><td>Point-to-point</td><td>Different starts, reverse headings, narrow doors, blocked routes, moving obstacles, cancellation and relocalization.</td><td>Record success rate, intervention rate, path/time, arrival pose and final measured speed. Provisional ordinary arrival target: ≤0.10 m; station precision must use a tighter measured contract.</td></tr>
+<tr><td>Docking repeatability</td><td>Forward/reverse, offsets, lighting, glare, tag occlusion, camera delay, worn contacts, traction and battery variation.</td><td>Proposed development gate: ≥99% completed dock-and-charge cycles over 500 stratified attempts, with zero false charge-success reports or unintended contacts. Track first-attempt success separately. This is a starting target, not a certification or proof of field reliability.</td></tr>
+<tr><td>Docking accuracy</td><td>Independent surveyed/fixture reference, not the same odometry/tag estimator used to control motion.</td><td>Measure final along/cross/yaw distribution against mechanical capture tolerances. Current software windows are 30 mm / 30 mm / 0.08 rad (~4.6°); they are not demonstrated accuracy and may be too loose for the connector.</td></tr>
+<tr><td>Charging/undocking</td><td>Unplugged/failed charger, contact bounce, charge interruption, battery fault, full battery, cancel and departure obstacle.</td><td>Confirmed contact and stable electrical evidence before charging success; no movement while energized unless the hardware contract explicitly permits it; safe disconnect proven before departure.</td></tr>
+<tr><td>Mapping and recovery</td><td>Clean boot, save/load, map replacement, moved robot, unavailable sensors and repeated mode switches.</td><td>One TF authority per edge; no navigation on wrong map or invalid pose. Station database version matches map version.</td></tr>
+<tr><td>Autonomous endurance</td><td>Representative full-shift jobs, return-to-charge, process restarts, blocked stations and failed package transfer.</td><td>No silent job loss or duplicate completion. Record availability, interventions/hour, faults, CPU/memory trends and recovery time. Set fleet/service targets from the actual operating domain.</td></tr>
+</tbody></table></div><p class="note">The matrix above is future validation work. No motion, charger, lift, simulator or live ROS graph testing was performed in this audit.</p></section>
+<section id="scope"><h2>Evidence, scope and limitations</h2><div class="panel"><p><strong>Snapshot:</strong> workspace <code>/home/tom/SensQ/ros2_ws</code>; Git root <code>/home/tom/SensQ</code>; HEAD <code>38325482178bb3fa0d1ef26c33b9e28ef6ec0208</code>. A pre-existing modification to <code>src/my_robot_navigation/config/nav2_config.yaml</code> was present and audited as-is. It remains untouched.</p><p><strong>Environment:</strong> ROS_DISTRO=humble; installed nav2_bringup 1.1.20, diff_drive_controller 2.53.3 and apriltag_ros 3.4.0. Installed plugin XML confirms PoseProgressChecker exists: this audit does not incorrectly flag it as incompatible with this Humble installation.</p><p><strong>Reviewed:</strong> active hardware/simulation navigation launch and configuration, custom docking server/controller/tracker/arbiter/database and selected tests, hardware/serial interface, control/control.ino, robot/sensor geometry, CSI calibration/publication, IMU driver, SLAM launch/config, coverage execution and relevant build metadata. Legacy launch/docking paths received targeted inspection. Firmware variants were discovered; the flashed binary and actual hardware configuration remain unknown.</p><p><strong>Not established:</strong> live graph topology, installed workspace/source parity, physical braking, sensor calibration accuracy, charger mechanics/electronics, BMS support, electrical safety architecture, payload specifications, operator app behavior or software outside this workspace. “Not found” means absent from the inspected workspace integration, not necessarily absent from the larger product. This is a code/configuration readiness audit, not an industrial safety certification.</p><p><strong>Read-only handling:</strong> source files and README were not edited, honoring the latest read-only request. Only this report, its generator and evidence manifest were written under <code>/tmp/amr-navigation-audit</code>; pytest temporary output was directed to <code>/tmp</code>.</p><h3>Primary reference checks</h3><ul><li><a href="https://control.ros.org/humble/doc/ros2_controllers/diff_drive_controller/doc/userdoc.html">Humble diff_drive_controller documentation</a> — command interfaces, odometry, limit enable flags and timeout behavior, checked against installed parameter headers.</li><li><a href="https://raw.githubusercontent.com/ros-navigation/navigation2/humble/nav2_bringup/launch/navigation_launch.py">Nav2 Humble navigation launch</a> — command remappings and lifecycle structure, checked against the installed launch file.</li><li><a href="https://raw.githubusercontent.com/ros-navigation/navigation2/humble/nav2_smoother/src/nav2_smoother.cpp">Nav2 Humble smoother server source</a> — optional post-smoothing collision validation.</li><li><a href="https://raw.githubusercontent.com/christianrauch/apriltag_ros/master/README.md">AprilTag ROS upstream input contract</a> — rectified images and projection intrinsics. This upstream README is not a pinned inspection of installed 3.4.0; validate that exact version before implementation.</li></ul><p>All finding excerpts are embedded for offline review. <code>evidence_manifest.json</code> records SHA-256 hashes of referenced source files. The report makes no network requests; external reference links open only when selected.</p></div></section><footer>Prepared for the AMR platform roadmap · Read-only audit · 07 September 2026</footer></main><script>
+const priority=document.getElementById('priority'),search=document.getElementById('search'),cards=[...document.querySelectorAll('.finding')];function filter(){let n=0;for(const card of cards){const show=(priority.value==='all'||card.dataset.priority===priority.value)&&card.textContent.toLowerCase().includes(search.value.toLowerCase());card.hidden=!show;if(show)n++}document.getElementById('count').textContent=n+' findings'}priority.addEventListener('change',filter);search.addEventListener('input',filter);
+</script></body></html>

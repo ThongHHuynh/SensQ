@@ -144,3 +144,6 @@ DiffDrive plugin. Use cylindrical wheel collisions before tuning friction.
 - RViz shows the planned path, turn types, and labeled decomposition cells.
 - Run `ros2 launch test_coverage coverage.launch.py use_sim_time:=true`.
 - Headland tuning record: `src/test-coverage/README_HEADLAND_TUNING.md`.
+
+## Navigation audit
+- [AMR navigation and docking audit](reports/amr-navigation-audit-2026-09-07/report.html): findings, development roadmap, and acceptance tests (2026-09-07).

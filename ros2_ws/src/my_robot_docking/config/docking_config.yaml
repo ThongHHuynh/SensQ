@@ -43,8 +43,8 @@ docking_server:
     rotation_stop_distance: 0.22
 
     # Controller limits
-    max_linear_speed: 0.30
-    min_linear_speed: 0.05
+    max_linear_speed: 0.10
+    min_linear_speed: 0.03
     max_angular_speed: 0.35
     min_angular_speed: 0.10
     max_linear_acceleration: 0.20

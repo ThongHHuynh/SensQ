@@ -149,7 +149,7 @@ controller_server:
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
-      vx_max: 0.3                   # matches velocity_smoother max_velocity[0]
+      vx_max: 0.4                   # matches velocity_smoother max_velocity[0]
       vx_min: -0.15                 # small reverse helps escape; 0.0 to forbid reversing
       vy_max: 0.0
       wz_max: 2.0                   # matches velocity_smoother max_velocity[2]
@@ -396,8 +396,8 @@ velocity_smoother:
     scale_velocities: false
     feedback: OPEN_LOOP
 
-    max_velocity: [0.3, 0.0, 2.0]
-    min_velocity: [-0.3, 0.0, -2.0]
+    max_velocity: [0.4, 0.0, 2.0]
+    min_velocity: [-0.4, 0.0, -2.0]
 
     max_accel: [2.0, 0.0, 4.0]
     max_decel: [-0.8, 0.0, -2.5]
